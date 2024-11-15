@@ -88,16 +88,17 @@
                          (.querySelectorAll
                            js/document
                            "script[type='application/x-scittle']")
-                         matching-tags
+                         matching-scittle-tags
                          (.filter (js/Array.from scittle-tags)
                                   #(let [src (aget % "src")
                                          url (when (seq src) (js/URL. src))
                                          path (when url (aget url "pathname"))]
-                                     (when (= reload path)
-                                       (js/console.log "Reloading" path)
-                                       (-> js/scittle
-                                           .-core
-                                           (.eval_script_tags %)))))]))))))))
+                                     (= reload path)))]
+                     (doseq [tag matching-scittle-tags]
+                       (js/console.log "Reloading" (aget tag "src"))
+                       (-> js/scittle
+                           .-core
+                           (.eval_script_tags tag)))))))))))
 
 (defn html-injector [req res done dir]
   ; intercept static requests to html and inject the loader script
