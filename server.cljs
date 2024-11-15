@@ -6,7 +6,6 @@
     ["path" :as path]
     ["fs/promises" :as fs]
     ["fs" :as fs-sync]
-    ["process" :as process]
     [applied-science.js-interop :as j]
     [promesa.core :as p]
     ["node-watch$default" :as watch]
@@ -19,9 +18,7 @@
 ; /blah/blah (implicit index)
 ; test </BODY> and </body>
 
-(def port 8000)
-
-(def dir (.cwd process))
+(def default-port 8000)
 
 (defn get-local-ip-addresses []
   (let [interfaces (os/networkInterfaces)]
@@ -37,7 +34,7 @@
         (.toString file-content)))
     (fn [_err] nil))) ; couldn't load HTML at this path
 
-(defn find-html [req]
+(defn find-html [req dir]
   (let [base-path (path/join dir (j/get req :path))
         extension (.toLowerCase (path/extname base-path))]
     (when (or (= extension "")
@@ -77,9 +74,9 @@
                  (js/console.log "packet" (pr-str packet))))))
      (let [tags "script[type='application/x-scittle'], script[src$='/main.cljs']"])))
 
-(defn html-injector [req res done]
+(defn html-injector [req res done dir]
   ; intercept static requests to html and inject the loader script
-  (p/let [html (find-html req)]
+  (p/let [html (find-html req dir)]
     (if html
       (let [injected-html (.replace html #"(?i)</body>"
                                     (str
@@ -95,7 +92,7 @@
     :default "./"
     :validate [#(fs-sync/existsSync %) "Must be a directory that exists."]]
    ["-p" "--port PORT" "Webserver port number."
-    :default port
+    :default default-port
     :parse-fn js/Number
     :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
    ["-h" "--help"]])
@@ -118,15 +115,14 @@
           (:help options)
           (print-usage summary)
           :else
-          (do
+          (let [port (:port options)
+                dir (:dir options)]
             (watch #js [*file*]
                    (fn [_event-type filename]
                      (js/console.log "Reloading" filename)
                      (load-file filename)))
-            (let [port (:port options)
-                  dir (:dir options)
-                  app (express)]
-              (.get app "/*" #(html-injector %1 %2 %3))
+            (let [app (express)] 
+              (.get app "/*" #(html-injector %1 %2 %3 dir))
               (.use app (.static express dir))
               (.use app "/_cljs-josh" #(sse-handler %1 %2))
               (.listen app port
