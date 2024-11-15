@@ -1,6 +1,7 @@
 (ns server
   {:clj-kondo/config '{:lint-as {promesa.core/let clojure.core/let}}}
   (:require
+    [clojure.tools.cli :as cli]
     ["os" :as os]
     ["path" :as path]
     ["fs/promises" :as fs]
@@ -72,7 +73,8 @@
                                 (aget "data")
                                 js/JSON.parse
                                 (js->clj :keywordize-keys true))]
-                 (js/console.log "packet" (pr-str packet))))))))
+                 (js/console.log "packet" (pr-str packet))))))
+     (let [tags "script[type='application/x-scittle'], script[src$='/main.cljs']"])))
 
 (defn html-injector [req res done]
   ; intercept static requests to html and inject the loader script
@@ -87,24 +89,41 @@
         (.send res injected-html))
       (done))))
 
-(defonce webserver
-  (let [app (express)]
-    (.get app "/*" #(html-injector %1 %2 %3))
-    (.use app (.static express dir))
-    (.use app "/_cljs-josh" #(sse-handler %1 %2))
-    (.listen app port
-             (fn []
-               (js/console.log (str "Web server running on port " port))
-               (doseq [ip (reverse (sort-by count (get-local-ip-addresses)))]
-                 (js/console.log (str "\thttp://" ip ":" port)))))))
-
-(defonce watcher
-  (watch #js [*file*]
-         (fn [_event-type filename]
-           (js/console.log "Reloading" filename)
-           (load-file filename))))
+(def cli-options
+  [["-p" "--port PORT" "Webserver port number."
+    :default port
+    :parse-fn js/Number
+    :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
+   ["-h" "--help"]])
 
 (defonce handle-error
   (.on js/process "uncaughtException"
        (fn [error]
         (js/console.error error))))
+
+(defn print-usage [opts]
+  (print "Program options:")
+  (print (:summary opts)))
+
+(defn main
+  [& args]
+  (let [opts (cli/parse-opts args cli-options)]
+    (if (-> opts :options :help)
+      (print-usage opts)
+      (do
+        (watch #js [*file*]
+               (fn [_event-type filename]
+                 (js/console.log "Reloading" filename)
+                 (load-file filename)))
+        (let [port (-> opts :options :port)
+              app (express)]
+          (.get app "/*" #(html-injector %1 %2 %3))
+          (.use app (.static express dir))
+          (.use app "/_cljs-josh" #(sse-handler %1 %2))
+          (.listen app port
+                   (fn []
+                     (js/console.log (str "Web server running on port " port ":"))
+                     (doseq [ip (reverse (sort-by count (get-local-ip-addresses)))]
+                       (js/console.log (str "- http://" ip ":" port))))))))))
+
+(apply main *command-line-args*)
