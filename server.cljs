@@ -75,6 +75,14 @@
 (def loader
   '(do
      (js/console.log "Josh Scittle re-loader installed")
+
+     (defn match-tags [tags source-attribute file-path]
+       (.filter (js/Array.from tags)
+                #(let [src (aget % source-attribute)
+                       url (when (seq src) (js/URL. src))
+                       path (when url (aget url "pathname"))]
+                   (= file-path path))))
+
      (let [conn (js/EventSource. "/_cljs-josh")]
        (aset conn "onmessage"
              (fn [data]
@@ -84,21 +92,32 @@
                                 (js->clj :keywordize-keys true))]
                  ; (js/console.log "packet" (pr-str packet))
                  (when-let [reload (:reload packet)]
-                   (let [scittle-tags
-                         (.querySelectorAll
-                           js/document
-                           "script[type='application/x-scittle']")
-                         matching-scittle-tags
-                         (.filter (js/Array.from scittle-tags)
-                                  #(let [src (aget % "src")
-                                         url (when (seq src) (js/URL. src))
-                                         path (when url (aget url "pathname"))]
-                                     (= reload path)))]
-                     (doseq [tag matching-scittle-tags]
-                       (js/console.log "Reloading" (aget tag "src"))
-                       (-> js/scittle
-                           .-core
-                           (.eval_script_tags tag)))))))))))
+                   (cond (.endsWith reload ".cljs")
+                         (let [scittle-tags
+                               (.querySelectorAll
+                                 js/document
+                                 "script[type='application/x-scittle']")
+                               matching-scittle-tags
+                               (match-tags scittle-tags "src" reload)]
+                           (doseq [tag matching-scittle-tags]
+                             (js/console.log "Reloading" (aget tag "src"))
+                             (-> js/scittle
+                                 .-core
+                                 (.eval_script_tags tag))))
+                         (.endsWith reload ".css")
+                         (let [css-tags
+                               (.querySelectorAll
+                                 js/document
+                                 "link[rel='stylesheet']")
+                               matching-css-tags
+                               (match-tags css-tags "href" reload)]
+                           (doseq [tag matching-css-tags]
+                             (js/console.log "Reloading" (aget tag "href"))
+                             (aset tag "href"
+                                   (-> (aget tag "href")
+                                       (.split "?")
+                                       first
+                                       (str "?" (js/Date.))))))))))))))
 
 (defn html-injector [req res done dir]
   ; intercept static requests to html and inject the loader script
