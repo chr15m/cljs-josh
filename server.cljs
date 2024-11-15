@@ -87,6 +87,10 @@
         (.send res injected-html))
       (done))))
 
+(defn frontend-file-changed
+  [_event-type filename]
+  (js/console.log "Frontend reloading:" filename))
+
 (def cli-options
   [["-d" "--dir DIR" "Path to dir to serve."
     :default "./"
@@ -117,10 +121,17 @@
           :else
           (let [port (:port options)
                 dir (:dir options)]
+            ; watch this server itself
             (watch #js [*file*]
                    (fn [_event-type filename]
                      (js/console.log "Reloading" filename)
                      (load-file filename)))
+            ; watch served frontend filem
+            (watch dir
+                   #js {:filter #(or (.endsWith % ".css")
+                                     (.endsWith % ".cljs"))}
+                   #(frontend-file-changed %1 %2))
+            ; launch the webserver
             (let [app (express)] 
               (.get app "/*" #(html-injector %1 %2 %3 dir))
               (.use app (.static express dir))
@@ -134,4 +145,5 @@
                                                (get-local-ip-addresses)))]
                            (js/console.log (str "- http://" ip ":" port))))))))))
 
-(apply main *command-line-args*)
+(defonce start-main
+  (apply main *command-line-args*))
