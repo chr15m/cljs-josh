@@ -46,24 +46,45 @@
               html (or html (try-file (path/join base-path "index.html")))]
         html))))
 
+(defn sse-handler
+  [req res]
+  (let [_ 12]
+    (js/console.log "sse connected")
+    (j/call res :setHeader "Content-Type" "text/event-stream")
+    (j/call res :setHeader "Cache-Control" "no-cache")
+    (j/call res :setHeader "Connection" "keep-alive")
+    (j/call res :flushHeaders)
+    (j/call req :on "close"
+            (fn []
+              (js/console.log "Closed")
+              (j/call res :end)))
+    (j/call res :write (str "data: "
+                            (js/JSON.stringify
+                              (clj->js {:hello 42}))
+                            "\n\n"))))
 
 (def loader
-  '(js/alert "goober"))
+  '(do
+     (js/console.log "loader")
+     (let [conn (js/EventSource. "/_cljs-josh")]
+       (aset conn "onmessage"
+             (fn [data]
+               (let [packet (-> data
+                                (aget "data")
+                                js/JSON.parse
+                                (js->clj :keywordize-keys true))]
+                 (js/console.log "packet" (pr-str packet))))))))
 
 (defn html-injector [req res done]
-  ; intercept static requests to html
-  ; read the file from disk
-  ; inject a script tag with an alert
-  ; return the modified html
+  ; intercept static requests to html and inject the loader script
   (p/let [html (find-html req)]
-    ; (js/console.log "HTML" html)
     (if html
       (let [injected-html (.replace html #"(?i)</body>"
                                     (str
                                       "<script type='application/x-scittle'>"
                                       (pr-str loader)
                                       "</script></body>"))]
-        ;(js/console.log "sending" injected-html)
+        ;(js/console.log "Intercepted" (j/get req :path))
         (.send res injected-html))
       (done))))
 
@@ -71,6 +92,7 @@
   (let [app (express)]
     (.get app "/*" #(html-injector %1 %2 %3))
     (.use app (.static express dir))
+    (.use app "/_cljs-josh" #(sse-handler %1 %2))
     (.listen app port
              (fn []
                (js/console.log (str "Web server running on port " port))
