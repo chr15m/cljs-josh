@@ -76,14 +76,14 @@
   '(do
      (js/console.log "Josh Scittle re-loader installed")
 
-     (defn match-tags [tags source-attribute file-path]
+     (defn- match-tags [tags source-attribute file-path]
        (.filter (js/Array.from tags)
                 #(let [src (aget % source-attribute)
                        url (when (seq src) (js/URL. src))
                        path (when url (aget url "pathname"))]
                    (= file-path path))))
 
-     (defn reload-scittle-tags [file-path]
+     (defn- reload-scittle-tags [file-path]
        (let [scittle-tags
              (.querySelectorAll
                js/document
@@ -96,7 +96,7 @@
                .-core
                (.eval_script_tags tag)))))
 
-     (defn reload-css-tags [file-path]
+     (defn- reload-css-tags [file-path]
        (let [css-tags
              (.querySelectorAll
                js/document
@@ -109,21 +109,32 @@
                  (-> (aget tag "href")
                      (.split "?")
                      first
-                     (str "?" (js/Date.)))))))
+                     (str "?" (.getTime (js/Date.))))))))
 
-     (let [conn (js/EventSource. "/_cljs-josh")]
-       (aset conn "onmessage"
-             (fn [data]
-               (let [packet (-> data
-                                (aget "data")
-                                js/JSON.parse
-                                (js->clj :keywordize-keys true))]
-                 ; (js/console.log "packet" (pr-str packet))
-                 (when-let [file-path (:reload packet)]
-                   (cond (.endsWith file-path ".cljs")
-                         (reload-scittle-tags file-path)
-                         (.endsWith file-path ".css")
-                         (reload-css-tags file-path)))))))))
+     (defn- setup-sse-connection []
+       (let [conn (js/EventSource. "/_cljs-josh")]
+         (aset conn "onerror"
+               (fn [ev]
+                 (js/console.error "SSE connection closed.")
+                 (when (= (aget conn "readyState") (aget js/EventSource "CLOSED"))
+                   (js/console.error "Creating new SSE connection.")
+                   (js/setTimeout
+                     (setup-sse-connection)
+                     2000))))
+         (aset conn "onmessage"
+               (fn [data]
+                 (let [packet (-> data
+                                  (aget "data")
+                                  js/JSON.parse
+                                  (js->clj :keywordize-keys true))]
+                   ; (js/console.log "packet" (pr-str packet))
+                   (when-let [file-path (:reload packet)]
+                     (cond (.endsWith file-path ".cljs")
+                           (reload-scittle-tags file-path)
+                           (.endsWith file-path ".css")
+                           (reload-css-tags file-path))))))))
+     
+     (setup-sse-connection)))
 
 (defn html-injector [req res done dir]
   ; intercept static requests to html and inject the loader script
