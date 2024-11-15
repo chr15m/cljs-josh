@@ -140,8 +140,15 @@
                      (load-file filename)))
             ; watch served frontend filem
             (watch dir
-                   #js {:filter #(or (.endsWith % ".css")
-                                     (.endsWith % ".cljs"))}
+                   #js {:filter
+                        #(or (.endsWith % ".css")
+                             (and
+                               (.endsWith % ".cljs")
+                               (try
+                                 (fs-sync/accessSync
+                                   % fs-sync/constants.X_OK)
+                                 (catch :default _e true))))
+                        :recursive true}
                    #(frontend-file-changed %1 %2))
             ; launch the webserver
             (let [app (express)] 
