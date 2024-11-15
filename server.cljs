@@ -20,6 +20,8 @@
 
 (def default-port 8000)
 
+(defonce connections (atom #{}))
+
 (defn get-local-ip-addresses []
   (let [interfaces (os/networkInterfaces)]
     (for [[_ infos] (js/Object.entries interfaces)
@@ -55,11 +57,20 @@
   (j/call req :on "close"
           (fn []
             (js/console.log "SSE connection closed")
+            (swap! connections disj res)
             (j/call res :end)))
+  (swap! connections conj res)
   (j/call res :write (str "data: "
                           (js/JSON.stringify
                             (clj->js {:hello 42}))
                           "\n\n")))
+
+(defn send-to-all [msg]
+  (doseq [res @connections]
+    (j/call res :write (str "data: "
+                            (js/JSON.stringify
+                              (clj->js msg))
+                            "\n\n"))))
 
 (def loader
   '(do
@@ -89,7 +100,8 @@
 
 (defn frontend-file-changed
   [_event-type filename]
-  (js/console.log "Frontend reloading:" filename))
+  (js/console.log "Frontend reloading:" filename)
+  (send-to-all {:reload filename}))
 
 (def cli-options
   [["-d" "--dir DIR" "Path to dir to serve."
