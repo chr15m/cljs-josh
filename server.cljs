@@ -119,7 +119,7 @@
                  (when (= (aget conn "readyState") (aget js/EventSource "CLOSED"))
                    (js/console.error "Creating new SSE connection.")
                    (js/setTimeout
-                     (setup-sse-connection)
+                     #(setup-sse-connection)
                      2000))))
          (aset conn "onmessage"
                (fn [data]
