@@ -82,8 +82,22 @@
                                 (aget "data")
                                 js/JSON.parse
                                 (js->clj :keywordize-keys true))]
-                 (js/console.log "packet" (pr-str packet))))))
-     (let [tags "script[type='application/x-scittle'], script[src$='/main.cljs']"])))
+                 ; (js/console.log "packet" (pr-str packet))
+                 (when-let [reload (:reload packet)]
+                   (let [scittle-tags
+                         (.querySelectorAll
+                           js/document
+                           "script[type='application/x-scittle']")
+                         matching-tags
+                         (.filter (js/Array.from scittle-tags)
+                                  #(let [src (aget % "src")
+                                         url (when (seq src) (js/URL. src))
+                                         path (when url (aget url "pathname"))]
+                                     (when (= reload path)
+                                       (js/console.log "Reloading" path)
+                                       (-> js/scittle
+                                           .-core
+                                           (.eval_script_tags %)))))]))))))))
 
 (defn html-injector [req res done dir]
   ; intercept static requests to html and inject the loader script
@@ -101,7 +115,7 @@
 (defn frontend-file-changed
   [_event-type filename]
   (js/console.log "Frontend reloading:" filename)
-  (send-to-all {:reload filename}))
+  (send-to-all {:reload (str "/" filename)}))
 
 (def cli-options
   [["-d" "--dir DIR" "Path to dir to serve."
