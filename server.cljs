@@ -5,6 +5,7 @@
     ["os" :as os]
     ["path" :as path]
     ["fs/promises" :as fs]
+    ["fs" :as fs-sync]
     ["process" :as process]
     [applied-science.js-interop :as j]
     [promesa.core :as p]
@@ -90,7 +91,10 @@
       (done))))
 
 (def cli-options
-  [["-p" "--port PORT" "Webserver port number."
+  [["-d" "--dir DIR" "Path to dir to serve."
+    :default "./"
+    :validate [#(fs-sync/existsSync %) "Must be a directory that exists."]]
+   ["-p" "--port PORT" "Webserver port number."
     :default port
     :parse-fn js/Number
     :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
@@ -101,29 +105,37 @@
        (fn [error]
         (js/console.error error))))
 
-(defn print-usage [opts]
+(defn print-usage [summary]
   (print "Program options:")
-  (print (:summary opts)))
+  (print summary))
 
 (defn main
   [& args]
-  (let [opts (cli/parse-opts args cli-options)]
-    (if (-> opts :options :help)
-      (print-usage opts)
-      (do
-        (watch #js [*file*]
-               (fn [_event-type filename]
-                 (js/console.log "Reloading" filename)
-                 (load-file filename)))
-        (let [port (-> opts :options :port)
-              app (express)]
-          (.get app "/*" #(html-injector %1 %2 %3))
-          (.use app (.static express dir))
-          (.use app "/_cljs-josh" #(sse-handler %1 %2))
-          (.listen app port
-                   (fn []
-                     (js/console.log (str "Web server running on port " port ":"))
-                     (doseq [ip (reverse (sort-by count (get-local-ip-addresses)))]
-                       (js/console.log (str "- http://" ip ":" port))))))))))
+  (let [{:keys [errors options summary]} (cli/parse-opts args cli-options)]
+    (cond errors
+          (doseq [e errors]
+            (print e))
+          (:help options)
+          (print-usage summary)
+          :else
+          (do
+            (watch #js [*file*]
+                   (fn [_event-type filename]
+                     (js/console.log "Reloading" filename)
+                     (load-file filename)))
+            (let [port (:port options)
+                  dir (:dir options)
+                  app (express)]
+              (.get app "/*" #(html-injector %1 %2 %3))
+              (.use app (.static express dir))
+              (.use app "/_cljs-josh" #(sse-handler %1 %2))
+              (.listen app port
+                       (fn []
+                         (js/console.log (str "Serving " dir
+                                              " on port " port ":"))
+                         (doseq [ip (reverse
+                                      (sort-by count
+                                               (get-local-ip-addresses)))]
+                           (js/console.log (str "- http://" ip ":" port))))))))))
 
 (apply main *command-line-args*)
