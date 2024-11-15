@@ -48,24 +48,23 @@
 
 (defn sse-handler
   [req res]
-  (let [_ 12]
-    (js/console.log "sse connected")
-    (j/call res :setHeader "Content-Type" "text/event-stream")
-    (j/call res :setHeader "Cache-Control" "no-cache")
-    (j/call res :setHeader "Connection" "keep-alive")
-    (j/call res :flushHeaders)
-    (j/call req :on "close"
-            (fn []
-              (js/console.log "Closed")
-              (j/call res :end)))
-    (j/call res :write (str "data: "
-                            (js/JSON.stringify
-                              (clj->js {:hello 42}))
-                            "\n\n"))))
+  (js/console.log "SSE connection established")
+  (j/call res :setHeader "Content-Type" "text/event-stream")
+  (j/call res :setHeader "Cache-Control" "no-cache")
+  (j/call res :setHeader "Connection" "keep-alive")
+  (j/call res :flushHeaders)
+  (j/call req :on "close"
+          (fn []
+            (js/console.log "SSE connection closed")
+            (j/call res :end)))
+  (j/call res :write (str "data: "
+                          (js/JSON.stringify
+                            (clj->js {:hello 42}))
+                          "\n\n")))
 
 (def loader
   '(do
-     (js/console.log "loader")
+     (js/console.log "Josh Scittle re-loader installed")
      (let [conn (js/EventSource. "/_cljs-josh")]
        (aset conn "onmessage"
              (fn [data]
