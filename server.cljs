@@ -36,11 +36,16 @@
     (fn [_err] nil))) ; couldn't load HTML at this path
 
 (defn find-html [req]
-  (p/let [base-path (path/join dir (j/get req :path))
-          html (try-file base-path)
-          html (or html (try-file (str base-path ".html")))
-          html (or html (try-file (path/join base-path "index.html")))]
-    html))
+  (let [base-path (path/join dir (j/get req :path))
+        extension (.toLowerCase (path/extname base-path))]
+    (when (or (= extension "")
+              (= extension ".htm")
+              (= extension ".html"))
+      (p/let [html (try-file base-path)
+              html (or html (try-file (str base-path ".html")))
+              html (or html (try-file (path/join base-path "index.html")))]
+        html))))
+
 
 (def loader
   '(js/alert "goober"))
@@ -64,7 +69,7 @@
 
 (defonce webserver
   (let [app (express)]
-    (.get app "/" #(html-injector %1 %2 %3))
+    (.get app "/*" #(html-injector %1 %2 %3))
     (.use app (.static express dir))
     (.listen app port
              (fn []
