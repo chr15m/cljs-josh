@@ -1,4 +1,6 @@
-(ns server
+#!/usr/bin/env npx nbb
+
+(ns josh
   {:clj-kondo/config '{:lint-as {promesa.core/let clojure.core/let}}}
   (:require
     [clojure.tools.cli :as cli]
@@ -215,5 +217,4 @@
                                                (get-local-ip-addresses)))]
                            (js/console.log (str "- http://" ip ":" port))))))))))
 
-(defonce start-main
-  (apply main *command-line-args*))
+(apply main (not-empty (js->clj (.slice js/process.argv 2))))

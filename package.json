@@ -1,7 +1,10 @@
 {
   "name": "cljs-josh",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Reloading ClojureScript server for scittle and nbb.",
+  "bin": {
+    "josh": "./josh.mjs"
+  },
   "dependencies": {
     "express": "^4.21.1",
     "nbb": "^1.3.195",
