@@ -1,5 +1,3 @@
-#!/usr/bin/env npx nbb
-
 (ns josh
   {:clj-kondo/config '{:lint-as {promesa.core/let clojure.core/let}}}
   (:require
