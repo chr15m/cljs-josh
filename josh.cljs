@@ -217,4 +217,5 @@
                                                (get-local-ip-addresses)))]
                            (js/console.log (str "- http://" ip ":" port))))))))))
 
-(apply main (not-empty (js->clj (.slice js/process.argv 2))))
+(defonce started
+  (apply main (not-empty (js->clj (.slice js/process.argv 2)))))
