@@ -7,13 +7,24 @@ npm install cljs-josh
 npx josh
 ```
 
-Then visit your [Scittle-enabled index.html](https://github.com/babashka/scittle/blob/main/resources/public/index.html) at <http://localhost:8000>.
+Then visit your [Scittle-enabled index.html](./example/index.html) at <http://localhost:8000>.
 
 When you save your .cljs files they will be hot-loaded into the browser running Scittle.
 
-### Why
+### Example
 
-I wanted a dev experience with Scittle with these features:
+See [the example](./example) for a basic project to start with.
+
+Start the server to try it out:
+
+```shell
+cd example
+npx josh
+```
+
+### Features
+
+I wanted a Scittle dev experience with these features:
 
 - No build step (the Scittle default)
 - Live reloading on file change like shadow-cljs
