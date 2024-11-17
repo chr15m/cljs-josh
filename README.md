@@ -9,6 +9,8 @@ npx josh
 
 Then visit your [Scittle-enabled index.html](https://github.com/babashka/scittle/blob/main/resources/public/index.html) at <http://localhost:8000>.
 
+When you save your .cljs files they will be hot-loaded into the browser running Scittle.
+
 ### Why
 
 I wanted a dev experience with Scittle with these features:
