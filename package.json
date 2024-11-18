@@ -1,11 +1,11 @@
 {
   "name": "cljs-josh",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Scittle cljs live-reloading server.",
   "author": "Chris McCormick <chis@mccormick.cx>",
   "homepage": "https://github.com/chr15m/sitefox",
   "bin": {
-    "josh": "./josh.mjs"
+    "josh": "josh.mjs"
   },
   "dependencies": {
     "express": "^4.21.1",
