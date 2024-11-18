@@ -26,11 +26,11 @@ npx josh
 
 I wanted a Scittle dev experience with these features:
 
-- No build step (the Scittle default)
-- Live reloading on file change like shadow-cljs
-- Both cljs and CSS files live-reloaded
-- Installable with `npm install`
-- Pure JavaScript, no Java dependency
-- Minimal library dependencies
+- No build step (the Scittle default).
+- Live reloading on file change, like shadow-cljs.
+- Both cljs and CSS files live-reloaded.
+- Installable with `npm install`.
+- Pure JavaScript, no Java/binary dependency.
+- Minimal library deps.
 
 Josh is built on [`nbb`](https://github.com/babashka/nbb/).
