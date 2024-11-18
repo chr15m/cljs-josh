@@ -73,68 +73,69 @@
                             "\n\n"))))
 
 (def loader
-  '(do
-     (js/console.log "Josh Scittle re-loader installed")
+  '(defonce _josh-reloader
+     (do
+       (js/console.log "Josh Scittle re-loader installed")
 
-     (defn- match-tags [tags source-attribute file-path]
-       (.filter (js/Array.from tags)
-                #(let [src (aget % source-attribute)
-                       url (when (seq src) (js/URL. src))
-                       path (when url (aget url "pathname"))]
-                   (= file-path path))))
+       (defn- match-tags [tags source-attribute file-path]
+         (.filter (js/Array.from tags)
+                  #(let [src (aget % source-attribute)
+                         url (when (seq src) (js/URL. src))
+                         path (when url (aget url "pathname"))]
+                     (= file-path path))))
 
-     (defn- reload-scittle-tags [file-path]
-       (let [scittle-tags
-             (.querySelectorAll
-               js/document
-               "script[type='application/x-scittle']")
-             matching-scittle-tags
-             (match-tags scittle-tags "src" file-path)]
-         (doseq [tag matching-scittle-tags]
-           (js/console.log "Reloading" (aget tag "src"))
-           (-> js/scittle
-               .-core
-               (.eval_script_tags tag)))))
+       (defn- reload-scittle-tags [file-path]
+         (let [scittle-tags
+               (.querySelectorAll
+                 js/document
+                 "script[type='application/x-scittle']")
+               matching-scittle-tags
+               (match-tags scittle-tags "src" file-path)]
+           (doseq [tag matching-scittle-tags]
+             (js/console.log "Reloading" (aget tag "src"))
+             (-> js/scittle
+                 .-core
+                 (.eval_script_tags tag)))))
 
-     (defn- reload-css-tags [file-path]
-       (let [css-tags
-             (.querySelectorAll
-               js/document
-               "link[rel='stylesheet']")
-             matching-css-tags
-             (match-tags css-tags "href" file-path)]
-         (doseq [tag matching-css-tags]
-           (js/console.log "Reloading" (aget tag "href"))
-           (aset tag "href"
-                 (-> (aget tag "href")
-                     (.split "?")
-                     first
-                     (str "?" (.getTime (js/Date.))))))))
+       (defn- reload-css-tags [file-path]
+         (let [css-tags
+               (.querySelectorAll
+                 js/document
+                 "link[rel='stylesheet']")
+               matching-css-tags
+               (match-tags css-tags "href" file-path)]
+           (doseq [tag matching-css-tags]
+             (js/console.log "Reloading" (aget tag "href"))
+             (aset tag "href"
+                   (-> (aget tag "href")
+                       (.split "?")
+                       first
+                       (str "?" (.getTime (js/Date.))))))))
 
-     (defn- setup-sse-connection []
-       (let [conn (js/EventSource. "/_cljs-josh")]
-         (aset conn "onerror"
-               (fn [ev]
-                 (js/console.error "SSE connection closed.")
-                 (when (= (aget conn "readyState") (aget js/EventSource "CLOSED"))
-                   (js/console.error "Creating new SSE connection.")
-                   (js/setTimeout
-                     #(setup-sse-connection)
-                     2000))))
-         (aset conn "onmessage"
-               (fn [data]
-                 (let [packet (-> data
-                                  (aget "data")
-                                  js/JSON.parse
-                                  (js->clj :keywordize-keys true))]
-                   ; (js/console.log "packet" (pr-str packet))
-                   (when-let [file-path (:reload packet)]
-                     (cond (.endsWith file-path ".cljs")
-                           (reload-scittle-tags file-path)
-                           (.endsWith file-path ".css")
-                           (reload-css-tags file-path))))))))
-     
-     (setup-sse-connection)))
+       (defn- setup-sse-connection []
+         (let [conn (js/EventSource. "/_cljs-josh")]
+           (aset conn "onerror"
+                 (fn [ev]
+                   (js/console.error "SSE connection closed.")
+                   (when (= (aget conn "readyState") (aget js/EventSource "CLOSED"))
+                     (js/console.error "Creating new SSE connection.")
+                     (js/setTimeout
+                       #(setup-sse-connection)
+                       2000))))
+           (aset conn "onmessage"
+                 (fn [data]
+                   (let [packet (-> data
+                                    (aget "data")
+                                    js/JSON.parse
+                                    (js->clj :keywordize-keys true))]
+                     ; (js/console.log "packet" (pr-str packet))
+                     (when-let [file-path (:reload packet)]
+                       (cond (.endsWith file-path ".cljs")
+                             (reload-scittle-tags file-path)
+                             (.endsWith file-path ".css")
+                             (reload-css-tags file-path))))))))
+
+       (setup-sse-connection))))
 
 (defn html-injector [req res done dir]
   ; intercept static requests to html and inject the loader script
@@ -192,13 +193,14 @@
             ; watch served frontend filem
             (watch dir
                    #js {:filter
-                        #(or (.endsWith % ".css")
-                             (and
-                               (.endsWith % ".cljs")
-                               (try
-                                 (fs-sync/accessSync
-                                   % fs-sync/constants.X_OK)
-                                 (catch :default _e true))))
+                        (fn [f]
+                          (or (.endsWith f ".css")
+                              (and
+                                (.endsWith f ".cljs")
+                                (try
+                                  (fs-sync/accessSync
+                                    f fs-sync/constants.X_OK)
+                                  (catch :default _e true)))))
                         :recursive true}
                    #(frontend-file-changed %1 %2))
             ; launch the webserver
