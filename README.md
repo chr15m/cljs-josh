@@ -27,6 +27,7 @@ npx josh
 I wanted a Scittle dev experience with these features:
 
 - No build step (the Scittle default).
+- Zero configuration required.
 - Live reloading on file change, like shadow-cljs.
 - Both cljs and CSS files live-reloaded.
 - Installable with `npm install`.
