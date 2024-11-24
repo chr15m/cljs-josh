@@ -11,6 +11,8 @@ Then visit your [Scittle-enabled index.html](./example/index.html) at <http://lo
 
 When you save your .cljs files they will be hot-loaded into the browser running Scittle.
 
+You can also install the `josh` command globally: `npm i -g cljs-josh`.
+
 ### Example
 
 See [the example](./example) for a basic project to start with.
