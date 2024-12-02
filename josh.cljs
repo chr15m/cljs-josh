@@ -179,11 +179,15 @@
         (load-file cljs-file)))))
 
 (defn server-function-runner [req res done dir]
-  ; TODO pass the rest of the path as args
-  (p/let [server-function (find-server-function req dir)]
-    (if server-function
-      (server-function req res done)
-      (done))))
+  ; TODO: pass the rest of the path as args
+  (if (is-exec-cljs? (path/join dir (j/get req :path)))
+    ; return a permission denied error on executable cljs files
+    (-> (j/call res :status 403)
+        (j/call :send "Permission denied on executable .cljs file."))
+    (p/let [server-function (find-server-function req dir)]
+      (if server-function
+        (server-function req res done)
+        (done)))))
 
 (defn frontend-file-changed
   [_event-type filename]
