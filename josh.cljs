@@ -29,7 +29,7 @@
           :when (= (.-family info) "IPv4")]
       (.-address info))))
 
-(defn try-file [html-path]
+(defn try-html-file [html-path]
   (p/catch
     (p/let [file-content (fs/readFile html-path)]
       (when file-content
@@ -42,9 +42,9 @@
     (when (or (= extension "")
               (= extension ".htm")
               (= extension ".html"))
-      (p/let [html (try-file base-path)
-              html (or html (try-file (str base-path ".html")))
-              html (or html (try-file (path/join base-path "index.html")))]
+      (p/let [html (try-html-file base-path)
+              html (or html (try-html-file (str base-path ".html")))
+              html (or html (try-html-file (path/join base-path "index.html")))]
         html))))
 
 (defn sse-handler
@@ -150,6 +150,41 @@
         (.send res injected-html))
       (done))))
 
+(defn is-exec-cljs? [f]
+  (and
+    (.endsWith f ".cljs")
+    (not
+      (try
+        (fs-sync/accessSync
+          f fs-sync/constants.X_OK)
+        (catch :default _e true)))))
+
+(defn find-cljs-file [dir path]
+  (let [base-path (path/join dir path)
+        filename (str base-path ".cljs")
+        _ (js/console.log "Testing:" filename)
+        found? (is-exec-cljs? filename)]
+    (if (not found?)
+      (let [path-parts (to-array (butlast (.split path "/")))]
+        (when (seq path-parts)
+          (find-cljs-file dir (.join path-parts "/"))))
+      filename)))
+
+(defn find-server-function [req dir]
+  (let [req-path (j/get req :path)
+        extension (.toLowerCase (path/extname req-path))]
+    (when (= extension "")
+      (let [cljs-file (find-cljs-file dir req-path)]
+        (js/console.log "cljs-file-found:" cljs-file)
+        (load-file cljs-file)))))
+
+(defn server-function-runner [req res done dir]
+  ; TODO pass the rest of the path as args
+  (p/let [server-function (find-server-function req dir)]
+    (if server-function
+      (server-function req res done)
+      (done))))
+
 (defn frontend-file-changed
   [_event-type filename]
   (js/console.log "Frontend reloading:" filename)
@@ -190,7 +225,7 @@
                    (fn [_event-type filename]
                      (js/console.log "Reloading" filename)
                      (load-file filename)))
-            ; watch served frontend filem
+            ; watch served frontend files
             (watch dir
                    #js {:filter
                         (fn [f]
@@ -205,7 +240,9 @@
                    #(frontend-file-changed %1 %2))
             ; launch the webserver
             (let [app (express)] 
-              (.get app "/*" #(html-injector %1 %2 %3 dir))
+              (.get app "/*"
+                    #(html-injector %1 %2 %3 dir)
+                    #(server-function-runner %1 %2 %3 dir))
               (.use app (.static express dir))
               (.use app "/_cljs-josh" #(sse-handler %1 %2))
               (.listen app port
