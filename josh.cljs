@@ -117,7 +117,8 @@
            (aset conn "onerror"
                  (fn [ev]
                    (js/console.error "SSE connection closed.")
-                   (when (= (aget conn "readyState") (aget js/EventSource "CLOSED"))
+                   (when (= (aget conn "readyState")
+                            (aget js/EventSource "CLOSED"))
                      (js/console.error "Creating new SSE connection.")
                      (js/setTimeout
                        #(setup-sse-connection)
@@ -162,7 +163,6 @@
 (defn find-cljs-file [dir path]
   (let [base-path (path/join dir path)
         filename (str base-path ".cljs")
-        _ (js/console.log "Testing:" filename)
         found? (is-exec-cljs? filename)]
     (if (not found?)
       (let [path-parts (to-array (butlast (.split path "/")))]
