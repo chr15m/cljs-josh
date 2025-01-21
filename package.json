@@ -14,5 +14,15 @@
   },
   "scripts": {
     "prepare": "jq --argjson files \"$(git ls-files | jq -R . | jq -s .)\" '.files = $files' package.json > .package-tmp.json && mv .package-tmp.json package.json"
-  }
+  },
+  "files": [
+    ".gitignore",
+    "README.md",
+    "example/index.html",
+    "example/main.cljs",
+    "example/style.css",
+    "josh.cljs",
+    "josh.mjs",
+    "package.json"
+  ]
 }
