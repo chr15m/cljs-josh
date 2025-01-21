@@ -163,6 +163,7 @@
     :default default-port
     :parse-fn js/Number
     :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
+   ["-i" "--init" "Set up a basic Scittle project. Copies an html, cljs, and css file into the current folder."]
    ["-h" "--help"]])
 
 (defonce handle-error
@@ -174,6 +175,23 @@
   (print "Program options:")
   (print summary))
 
+(defn install-examples []
+  (let [josh-dir (path/dirname *file*)
+        example-dir (path/join josh-dir "example")
+        files ["index.html" "main.cljs" "style.css"]]
+    (js/console.log "Copying example files here.")
+    (p/do!
+      (->> files
+           (map #(p/catch
+                   (p/do!
+                     (fs/access %)
+                     (js/console.log % "exists already, skipping."))
+                   (fn [_err]
+                     (js/console.log "Copying" %)
+                     (fs/cp (path/join example-dir %) %))))
+           (p/all))
+      (js/console.log "Now run josh to serve this folder."))))
+
 (defn main
   [& args]
   (let [{:keys [errors options summary]} (cli/parse-opts args cli-options)]
@@ -182,6 +200,8 @@
             (print e))
           (:help options)
           (print-usage summary)
+          (:init options)
+          (install-examples)
           :else
           (let [port (:port options)
                 dir (:dir options)]
