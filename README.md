@@ -1,5 +1,7 @@
 [Scittle](https://github.com/babashka/scittle/) cljs live-reloading server.
 
+[A YouTube video about `cljs-josh`](https://youtu.be/4tbjE0_W-58).
+
 Start the `josh` watch server:
 
 ```shell
@@ -12,6 +14,8 @@ Then visit your [Scittle-enabled index.html](./example/index.html) at <http://lo
 When you save your .cljs files they will be hot-loaded into the browser running Scittle.
 
 You can also install the `josh` command globally: `npm i -g cljs-josh`.
+
+Bootstrap a basic Scittle project with `josh --init`.
 
 ### Example
 
