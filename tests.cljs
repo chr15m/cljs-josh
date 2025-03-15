@@ -33,7 +33,10 @@
              ; each test
              (done)))})
 
-(defn wait-for-server-ready [port timeout-ms]
+;; Server test utilities
+(defn wait-for-server-ready 
+  "Poll a server endpoint until it responds or times out"
+  [port timeout-ms]
   (let [start-time (js/Date.now)]
     (p/create
       (fn [resolve reject]
@@ -48,29 +51,50 @@
                              (js/setTimeout check-server 100))))))]
           (check-server))))))
 
+(defn start-josh-server 
+  "Start a josh server in a subprocess with the given options"
+  [{:keys [dir port]
+    :or {dir "./" port 8123}}]
+  (p/let [server-process (child-process/spawn 
+                           "npx" 
+                           #js ["nbb" "josh.cljs" 
+                                "--dir" dir 
+                                "--port" (str port)]
+                           #js {:stdio "inherit"})
+          _ (js/console.log (str "Started josh server subprocess on port " port))
+          
+          ; Wait for server to be ready (max 5 seconds)
+          _ (wait-for-server-ready port 5000)]
+    server-process))
+
+(defn stop-josh-server 
+  "Stop a running josh server process"
+  [server-process]
+  (when server-process
+    (.kill server-process)
+    (js/console.log "Killed josh server subprocess")))
+
+(defn http-get 
+  "Make an HTTP GET request and return the response body as a string"
+  [url]
+  (p/create
+    (fn [resolve reject]
+      (-> (http/get url
+                   (fn [res]
+                     (let [data (atom "")]
+                       (.on res "data" #(swap! data str %))
+                       (.on res "end" #(resolve @data)))))
+          (.on "error" #(reject %))))))
+
 (deftest first-test
   (t/testing "First basic server tests"
     (async
       done
-      (p/let [; Start josh server as a subprocess
-              server-process (child-process/spawn 
-                               "npx" 
-                               #js ["nbb" "josh.cljs" "--dir" "example" "--port" "8123"]
-                               #js {:stdio "inherit"})
-              _ (js/console.log "Started josh server subprocess")
-              
-              ; Wait for server to be ready (max 5 seconds)
-              _ (wait-for-server-ready 8123 5000)
+      (p/let [; Start josh server in the example directory
+              server-process (start-josh-server {:dir "example" :port 8123})
               
               ; Make a request to the homepage
-              response (p/create
-                         (fn [resolve _reject]
-                           (-> (http/get "http://localhost:8123/" 
-                                        (fn [res]
-                                          (let [data (atom "")]
-                                            (.on res "data" #(swap! data str %))
-                                            (.on res "end" #(resolve @data)))))
-                               (.on "error" #(js/console.error "Request error:" %)))))]
+              response (http-get "http://localhost:8123/")]
         
         ; Check that the response contains expected content
         (is (string? response) "Response should be a string")
@@ -78,9 +102,7 @@
         (is (.includes response "scittle") "Response should contain scittle")
         
         ; Clean up - kill the server process
-        (when server-process
-          (.kill server-process)
-          (js/console.log "Killed josh server subprocess"))
+        (stop-josh-server server-process)
         
         (done)))))
 
