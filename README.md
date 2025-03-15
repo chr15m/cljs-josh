@@ -24,6 +24,16 @@ cd example
 npx josh
 ```
 
+### Usage
+
+```
+Program options:
+  -d, --dir DIR    ./    Path to dir to serve.
+  -p, --port PORT  8000  Webserver port number.
+      --prod             Run in production mode (disables live reloading)
+  -h, --help
+```
+
 ### Features
 
 I wanted a Scittle dev experience with these features:
