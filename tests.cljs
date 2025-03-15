@@ -87,6 +87,28 @@
         
         (done)))))
 
+(deftest html-injection-test
+  (t/testing "HTML loader script injection"
+    (async
+      done
+      (p/let [server-process (start-josh-server {:dir "example" :port 8124})
+              res (js/fetch "http://localhost:8124/")
+              html-content (.text res)]
+        
+        ; Check that the loader script is injected
+        (is (.includes html-content "_josh-reloader") 
+            "Response should contain the loader script")
+        (is (.includes html-content "setup-sse-connection") 
+            "Response should contain the SSE connection setup")
+        (is (.includes html-content "reload-scittle-tags") 
+            "Response should contain the CLJS reload function")
+        (is (.includes html-content "reload-css-tags") 
+            "Response should contain the CSS reload function")
+        
+        (stop-josh-server server-process)
+        
+        (done)))))
+
 (defmethod t/report [:cljs.test/default :begin-test-var] [m]
   (println "TEST ===>" (-> m :var meta :name)))
 
