@@ -16,7 +16,7 @@
 ; /blah/blah/index.html
 ; /blah/blah.html
 ; /blah/blah (implicit index)
-; test </BODY> and </body>
+; test SSE injection with both </BODY> and </body>
 
 (def default-port 8000)
 
@@ -138,15 +138,22 @@
 
        (setup-sse-connection))))
 
-(defn html-injector [req res done dir]
+(defn is-production-mode? [options]
+  (or (= (.. js/process -env -NODE_ENV) "production")
+      (:prod options)))
+
+(defn html-injector [req res done dir options]
   ; intercept static requests to html and inject the loader script
   (p/let [html (find-html req dir)]
     (if html
-      (let [injected-html (.replace html #"(?i)</body>"
-                                    (str
-                                      "<script type='application/x-scittle'>"
-                                      (pr-str loader)
-                                      "</script></body>"))]
+      (let [production-mode? (is-production-mode? options)
+            injected-html (if production-mode?
+                            html  ; In production mode, don't inject the loader
+                            (.replace html #"(?i)</body>"
+                                     (str
+                                       "<script type='application/x-scittle'>"
+                                       (pr-str loader)
+                                       "</script></body>")))]
         ;(js/console.log "Intercepted" (j/get req :path))
         (.send res injected-html))
       (done))))
@@ -202,6 +209,7 @@
     :default default-port
     :parse-fn js/Number
     :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
+   [nil "--prod" "Run in production mode (disables live reloading)"]
    ["-h" "--help"]])
 
 (defonce handle-error
@@ -223,32 +231,43 @@
           (print-usage summary)
           :else
           (let [port (:port options)
-                dir (:dir options)]
-            ; watch this server itself
-            (watch #js [*file*]
-                   (fn [_event-type filename]
-                     (js/console.log "Reloading" filename)
-                     (load-file filename)))
-            ; watch served frontend files
-            (watch dir
-                   #js {:filter
-                        (fn [f]
-                          (or (.endsWith f ".css")
-                              (and
-                                (.endsWith f ".cljs")
-                                (try
-                                  (fs-sync/accessSync
-                                    f fs-sync/constants.X_OK)
-                                  (catch :default _e true)))))
-                        :recursive true}
-                   #(frontend-file-changed %1 %2))
+                dir (:dir options)
+                production-mode? (is-production-mode? options)]
+            (when production-mode?
+              (js/console.log "Running in production mode (live reloading disabled)"))
+            
+            ; Only set up watchers if not in production mode
+            (when-not production-mode?
+              ; watch this server itself
+              (watch #js [*file*]
+                     (fn [_event-type filename]
+                       (js/console.log "Reloading" filename)
+                       (load-file filename)))
+              ; watch served frontend files
+              (watch dir
+                     #js {:filter
+                          (fn [f]
+                            (or (.endsWith f ".css")
+                                (and
+                                  (.endsWith f ".cljs")
+                                  (try
+                                    (fs-sync/accessSync
+                                      f fs-sync/constants.X_OK)
+                                    (catch :default _e true)))))
+                          :recursive true}
+                     #(frontend-file-changed %1 %2)))
+            
             ; launch the webserver
             (let [app (express)] 
               (.get app "/*"
-                    #(html-injector %1 %2 %3 dir)
+                    #(html-injector %1 %2 %3 dir options)
                     #(server-function-runner %1 %2 %3 dir))
               (.use app (.static express dir))
-              (.use app "/_cljs-josh" #(sse-handler %1 %2))
+              
+              ; Only set up SSE endpoint if not in production mode
+              (when-not production-mode?
+                (.use app "/_cljs-josh" #(sse-handler %1 %2)))
+              
               (.listen app port
                        (fn []
                          (js/console.log (str "Serving " dir
