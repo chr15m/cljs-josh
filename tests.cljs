@@ -166,6 +166,172 @@
         
         (done)))))
 
+;; Helper functions for file manipulation in tests
+(defn create-test-file 
+  "Create a file with the given content for testing"
+  [filepath content]
+  (p/let [_ (p/create (fn [resolve reject]
+                        (fs/mkdir (path/dirname filepath) #js {:recursive true}
+                                 (fn [err]
+                                   (if err
+                                     (reject err)
+                                     (resolve true))))))
+          _ (p/create (fn [resolve reject]
+                        (fs/writeFile filepath content
+                                     (fn [err]
+                                       (if err
+                                         (reject err)
+                                         (resolve true))))))]
+    filepath))
+
+(defn delete-test-file 
+  "Delete a test file"
+  [filepath]
+  (p/catch
+    (p/create (fn [resolve reject]
+                (fs/unlink filepath
+                          (fn [err]
+                            (if err
+                              (reject err)
+                              (resolve true))))))
+    (fn [_] false)))
+
+(defn delete-test-dir
+  "Delete a test directory recursively"
+  [dirpath]
+  (p/catch
+    (p/create (fn [resolve reject]
+                (fs/rm dirpath #js {:recursive true, :force true}
+                      (fn [err]
+                        (if err
+                          (reject err)
+                          (resolve true))))))
+    (fn [_] false)))
+
+(deftest path-resolution-test
+  (t/testing "Path resolution for different URL patterns"
+    (async
+      done
+      (p/let [;; Create test directory structure
+              test-dir "example/test-paths"
+              _ (p/create (fn [resolve reject]
+                            (fs/mkdir test-dir #js {:recursive true}
+                                     (fn [err]
+                                       (if err
+                                         (reject err)
+                                         (resolve true))))))
+              
+              ;; Create various test files
+              root-html (create-test-file 
+                          (path/join test-dir "root.html") 
+                          "<html><body><h1>Root HTML</h1></body></html>")
+              
+              subdir (path/join test-dir "subdir")
+              _ (p/create (fn [resolve reject]
+                            (fs/mkdir subdir #js {:recursive true}
+                                     (fn [err]
+                                       (if err
+                                         (reject err)
+                                         (resolve true))))))
+              
+              subdir-html (create-test-file 
+                            (path/join subdir "page.html") 
+                            "<html><body><h1>Subdir Page</h1></body></html>")
+              
+              index-html (create-test-file 
+                           (path/join subdir "index.html") 
+                           "<html><body><h1>Subdir Index</h1></body></html>")
+              
+              ;; Start server
+              server-process (start-josh-server 
+                               ["--dir" "example" "--port" "8127"] 
+                               nil)
+              
+              ;; Test direct HTML file access
+              _ (js/console.log "Testing direct HTML file access")
+              root-res (js/fetch "http://localhost:8127/test-paths/root.html")
+              root-content (.text root-res)
+              _ (js/console.log "Direct HTML file access test completed")
+              
+              ;; Test HTML file in subdirectory
+              _ (js/console.log "Testing HTML file in subdirectory")
+              subdir-res (js/fetch "http://localhost:8127/test-paths/subdir/page.html")
+              subdir-content (.text subdir-res)
+              _ (js/console.log "Subdirectory HTML file test completed")
+              
+              ;; Test implicit index.html resolution
+              _ (js/console.log "Testing implicit index.html resolution with trailing slash")
+              index-res (js/fetch "http://localhost:8127/test-paths/subdir/")
+              index-content (.text index-res)
+              _ (js/console.log "Implicit index.html with trailing slash test completed")
+              
+              ;; Test path without trailing slash (should resolve to index.html)
+              _ (js/console.log "Testing implicit index.html resolution without trailing slash")
+              no-slash-res (js/fetch "http://localhost:8127/test-paths/subdir")
+              no-slash-content (.text no-slash-res)
+              _ (js/console.log "Implicit index.html without trailing slash test completed")
+              
+              ;; Test non-existent path
+              _ (js/console.log "Testing non-existent path")
+              not-found-res (p/catch
+                              (js/fetch "http://localhost:8127/test-paths/not-exists.html")
+                              (fn [e] 
+                                (js/console.log "Non-existent path error caught as expected")
+                                e))
+              _ (js/console.log "Non-existent path test completed")
+              
+              ;; Test root path without extension
+              _ (js/console.log "Testing root path without extension")
+              root-no-ext-res (js/fetch "http://localhost:8127/test-paths/root")
+              root-no-ext-content (.text root-no-ext-res)
+              _ (js/console.log "Root path without extension test completed")
+              
+              ;; Test root path with trailing slash
+              _ (js/console.log "Testing root path with trailing slash")
+              root-slash-res (js/fetch "http://localhost:8127/test-paths/root/")
+              root-slash-content (.text root-slash-res)
+              _ (js/console.log "Root path with trailing slash test completed")
+              
+              ;; Test top-level root path
+              _ (js/console.log "Testing top-level root path")
+              top-root-res (js/fetch "http://localhost:8127/")
+              top-root-content (.text top-root-res)
+              _ (js/console.log "Top-level root path test completed")]
+        
+        ;; Verify direct HTML file access
+        (is (.includes root-content "Root HTML") 
+            "Should serve direct HTML file")
+        
+        ;; Verify HTML file in subdirectory
+        (is (.includes subdir-content "Subdir Page") 
+            "Should serve HTML file in subdirectory")
+        
+        ;; Verify implicit index.html resolution with trailing slash
+        (is (.includes index-content "Subdir Index") 
+            "Should serve index.html for directory path with trailing slash")
+        
+        ;; Verify implicit index.html resolution without trailing slash
+        (is (.includes no-slash-content "Subdir Index") 
+            "Should serve index.html for directory path without trailing slash")
+        
+        ;; Verify root path without extension resolves to root.html
+        (is (.includes root-no-ext-content "Root HTML") 
+            "Should serve root.html for /root path without extension")
+        
+        ;; Verify root path with trailing slash resolves to root.html
+        (is (.includes root-slash-content "Root HTML") 
+            "Should serve root.html for /root/ path with trailing slash")
+        
+        ;; Verify top-level root path resolves to index.html
+        (is (.includes top-root-content "Scittle Example") 
+            "Should serve index.html for top-level root path")
+        
+        ;; Clean up test files and stop server
+        (delete-test-dir test-dir)
+        (stop-josh-server server-process)
+        
+        (done)))))
+
 (defmethod t/report [:cljs.test/default :begin-test-var] [m]
   (println "TEST ===>" (-> m :var meta :name)))
 
