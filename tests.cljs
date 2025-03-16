@@ -34,7 +34,7 @@
              (done)))})
 
 ;; Server test utilities
-(defn wait-for-server-ready 
+(defn wait-for-server-ready
   "Poll a server endpoint until it responds or times out"
   [port timeout-ms]
   (let [start-time (js/Date.now)]
@@ -43,7 +43,7 @@
         (letfn [(check-server []
                   (-> (js/fetch (str "http://localhost:" port "/"))
                       (.then #(resolve true))
-                      (.catch 
+                      (.catch
                         (fn [_]
                           (if (> (- (js/Date.now) start-time) timeout-ms)
                             (reject (js/Error. "Server startup timed out"))
@@ -58,7 +58,7 @@
     :parse-fn js/Number]
    [nil "--prod" "Run in production mode"]])
 
-(defn start-josh-server 
+(defn start-josh-server
   "Start a josh server in a subprocess with the given options"
   [args env-vars]
   (let [parsed-opts (:options (cli/parse-opts args cli-options))
@@ -70,12 +70,12 @@
                   (js/Object.assign current-env (clj->js env-vars))
                   current-env)
         cmd-args (clj->js (concat ["nbb" "josh.cljs"] args))
-        server-process (child-process/spawn 
-                         "npx" 
+        server-process (child-process/spawn
+                         "npx"
                          cmd-args
                          #js {:stdio "inherit"
                               :env env-obj})]
-    (js/console.log (str "Started josh server subprocess with args: " 
+    (js/console.log (str "Started josh server subprocess with args: "
                          (js/JSON.stringify cmd-args)
                          (when (and env-vars (.-NODE_ENV env-vars))
                            (str " with NODE_ENV=" (.-NODE_ENV env-vars)))))
@@ -83,7 +83,7 @@
     (p/let [_ (wait-for-server-ready port 5000)]
       server-process)))
 
-(defn stop-josh-server 
+(defn stop-josh-server
   "Stop a running josh server process"
   [server-process]
   (when server-process
@@ -97,13 +97,13 @@
       (p/let [server-process (start-josh-server ["--dir" "example" "--port" "8123"] nil)
               res (js/fetch "http://localhost:8123/")
               response (.text res)]
-        
+
         (is (string? response) "Response should be a string")
         (is (.includes response "<html") "Response should contain HTML")
         (is (.includes response "scittle") "Response should contain scittle")
-        
+
         (stop-josh-server server-process)
-        
+
         (done)))))
 
 (deftest html-injection-test
@@ -113,19 +113,19 @@
       (p/let [server-process (start-josh-server ["--dir" "example" "--port" "8124"] nil)
               res (js/fetch "http://localhost:8124/")
               html-content (.text res)]
-        
+
         ; Check that the loader script is injected
-        (is (.includes html-content "_josh-reloader") 
+        (is (.includes html-content "_josh-reloader")
             "Response should contain the loader script")
-        (is (.includes html-content "setup-sse-connection") 
+        (is (.includes html-content "setup-sse-connection")
             "Response should contain the SSE connection setup")
-        (is (.includes html-content "reload-scittle-tags") 
+        (is (.includes html-content "reload-scittle-tags")
             "Response should contain the CLJS reload function")
-        (is (.includes html-content "reload-css-tags") 
+        (is (.includes html-content "reload-css-tags")
             "Response should contain the CSS reload function")
-        
+
         (stop-josh-server server-process)
-        
+
         (done)))))
 
 (deftest prod-flag-test
@@ -135,39 +135,39 @@
       (p/let [server-process (start-josh-server ["--dir" "example" "--port" "8125" "--prod"] nil)
               res (js/fetch "http://localhost:8125/")
               html-content (.text res)]
-        
+
         ; Check that the loader script is NOT injected
-        (is (not (.includes html-content "_josh-reloader")) 
+        (is (not (.includes html-content "_josh-reloader"))
             "Response should NOT contain the loader script")
-        (is (not (.includes html-content "setup-sse-connection")) 
+        (is (not (.includes html-content "setup-sse-connection"))
             "Response should NOT contain the SSE connection setup")
-        
+
         (stop-josh-server server-process)
-        
+
         (done)))))
 
 (deftest prod-env-test
   (t/testing "Production mode with NODE_ENV=production"
     (async
       done
-      (p/let [server-process (start-josh-server 
+      (p/let [server-process (start-josh-server
                                ["--dir" "example" "--port" "8126"]
                                {"NODE_ENV" "production"})
               res (js/fetch "http://localhost:8126/")
               html-content (.text res)]
-        
+
         ; Check that the loader script is NOT injected
-        (is (not (.includes html-content "_josh-reloader")) 
+        (is (not (.includes html-content "_josh-reloader"))
             "Response should NOT contain the loader script")
-        (is (not (.includes html-content "setup-sse-connection")) 
+        (is (not (.includes html-content "setup-sse-connection"))
             "Response should NOT contain the SSE connection setup")
-        
+
         (stop-josh-server server-process)
-        
+
         (done)))))
 
 ;; Helper functions for file manipulation in tests
-(defn create-test-file 
+(defn create-test-file
   "Create a file with the given content for testing"
   [filepath content]
   (p/let [_ (p/create (fn [resolve reject]
@@ -184,7 +184,7 @@
                                          (resolve true))))))]
     filepath))
 
-(defn delete-test-file 
+(defn delete-test-file
   "Delete a test file"
   [filepath]
   (p/catch
@@ -220,12 +220,12 @@
                                        (if err
                                          (reject err)
                                          (resolve true))))))
-              
+
               ;; Create various test files
-              root-html (create-test-file 
-                          (path/join test-dir "root.html") 
+              root-html (create-test-file
+                          (path/join test-dir "root.html")
                           "<html><body><h1>Root HTML</h1></body></html>")
-              
+
               subdir (path/join test-dir "subdir")
               _ (p/create (fn [resolve reject]
                             (fs/mkdir subdir #js {:recursive true}
@@ -233,103 +233,103 @@
                                        (if err
                                          (reject err)
                                          (resolve true))))))
-              
-              subdir-html (create-test-file 
-                            (path/join subdir "page.html") 
+
+              subdir-html (create-test-file
+                            (path/join subdir "page.html")
                             "<html><body><h1>Subdir Page</h1></body></html>")
-              
-              index-html (create-test-file 
-                           (path/join subdir "index.html") 
+
+              index-html (create-test-file
+                           (path/join subdir "index.html")
                            "<html><body><h1>Subdir Index</h1></body></html>")
-              
+
               ;; Start server
-              server-process (start-josh-server 
-                               ["--dir" "example" "--port" "8127"] 
+              server-process (start-josh-server
+                               ["--dir" "example" "--port" "8127"]
                                nil)
-              
+
               ;; Test direct HTML file access
               _ (js/console.log "Testing direct HTML file access")
               root-res (js/fetch "http://localhost:8127/test-paths/root.html")
               root-content (.text root-res)
               _ (js/console.log "Direct HTML file access test completed")
-              
+
               ;; Test HTML file in subdirectory
               _ (js/console.log "Testing HTML file in subdirectory")
               subdir-res (js/fetch "http://localhost:8127/test-paths/subdir/page.html")
               subdir-content (.text subdir-res)
               _ (js/console.log "Subdirectory HTML file test completed")
-              
+
               ;; Test implicit index.html resolution
               _ (js/console.log "Testing implicit index.html resolution with trailing slash")
               index-res (js/fetch "http://localhost:8127/test-paths/subdir/")
               index-content (.text index-res)
               _ (js/console.log "Implicit index.html with trailing slash test completed")
-              
+
               ;; Test path without trailing slash (should resolve to index.html)
               _ (js/console.log "Testing implicit index.html resolution without trailing slash")
               no-slash-res (js/fetch "http://localhost:8127/test-paths/subdir")
               no-slash-content (.text no-slash-res)
               _ (js/console.log "Implicit index.html without trailing slash test completed")
-              
+
               ;; Test non-existent path
               _ (js/console.log "Testing non-existent path")
               not-found-res (p/catch
                               (js/fetch "http://localhost:8127/test-paths/not-exists.html")
-                              (fn [e] 
+                              (fn [e]
                                 (js/console.log "Non-existent path error caught as expected")
                                 e))
               _ (js/console.log "Non-existent path test completed")
-              
+
               ;; Test root path without extension
               _ (js/console.log "Testing root path without extension")
               root-no-ext-res (js/fetch "http://localhost:8127/test-paths/root")
               root-no-ext-content (.text root-no-ext-res)
               _ (js/console.log "Root path without extension test completed")
-              
+
               ;; Test root path with trailing slash
               _ (js/console.log "Testing root path with trailing slash")
               root-slash-res (js/fetch "http://localhost:8127/test-paths/root/")
               root-slash-content (.text root-slash-res)
               _ (js/console.log "Root path with trailing slash test completed")
-              
+
               ;; Test top-level root path
               _ (js/console.log "Testing top-level root path")
               top-root-res (js/fetch "http://localhost:8127/")
               top-root-content (.text top-root-res)
               _ (js/console.log "Top-level root path test completed")]
-        
+
         ;; Verify direct HTML file access
-        (is (.includes root-content "Root HTML") 
+        (is (.includes root-content "Root HTML")
             "Should serve direct HTML file")
-        
+
         ;; Verify HTML file in subdirectory
-        (is (.includes subdir-content "Subdir Page") 
+        (is (.includes subdir-content "Subdir Page")
             "Should serve HTML file in subdirectory")
-        
+
         ;; Verify implicit index.html resolution with trailing slash
-        (is (.includes index-content "Subdir Index") 
+        (is (.includes index-content "Subdir Index")
             "Should serve index.html for directory path with trailing slash")
-        
+
         ;; Verify implicit index.html resolution without trailing slash
-        (is (.includes no-slash-content "Subdir Index") 
+        (is (.includes no-slash-content "Subdir Index")
             "Should serve index.html for directory path without trailing slash")
-        
+
         ;; Verify root path without extension resolves to root.html
-        (is (.includes root-no-ext-content "Root HTML") 
+        (is (.includes root-no-ext-content "Root HTML")
             "Should serve root.html for /root path without extension")
-        
+
         ;; Verify root path with trailing slash resolves to root.html
-        (is (.includes root-slash-content "Root HTML") 
+        (is (.includes root-slash-content "Root HTML")
             "Should serve root.html for /root/ path with trailing slash")
-        
+
         ;; Verify top-level root path resolves to index.html
-        (is (.includes top-root-content "Scittle Example") 
+        (is (.includes top-root-content "Scittle Example")
             "Should serve index.html for top-level root path")
-        
+
         ;; Clean up test files and stop server
         (delete-test-dir test-dir)
         (stop-josh-server server-process)
-        
+
         (done)))))
 
 (defmethod t/report [:cljs.test/default :begin-test-var] [m]

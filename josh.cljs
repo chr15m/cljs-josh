@@ -242,7 +242,7 @@
                 production-mode? (is-production-mode? options)]
             (when production-mode?
               (js/console.log "Running in production mode (live reloading disabled)"))
-            
+
             ; Only set up watchers if not in production mode
             (when-not production-mode?
               ; watch this server itself
@@ -263,18 +263,18 @@
                                     (catch :default _e true)))))
                           :recursive true}
                      #(frontend-file-changed %1 %2)))
-            
+
             ; launch the webserver
-            (let [app (express)] 
+            (let [app (express)]
               (.get app "/*"
                     #(html-injector %1 %2 %3 dir options)
                     #(server-function-runner %1 %2 %3 dir))
               (.use app (.static express dir))
-              
+
               ; Only set up SSE endpoint if not in production mode
               (when-not production-mode?
                 (.use app "/_cljs-josh" #(sse-handler %1 %2)))
-              
+
               (.listen app port
                        (fn []
                          (js/console.log (str "Serving " dir
