@@ -42,8 +42,15 @@
     (when (or (= extension "")
               (= extension ".htm")
               (= extension ".html"))
-      (p/let [html (try-html-file base-path)
-              html (or html (try-html-file (str base-path ".html")))
+      (p/let [; Try the exact path first
+              html (try-html-file base-path)
+              ; If path ends with /, remove it before adding .html
+              base-path-no-slash (if (.endsWith base-path "/")
+                                   (.slice base-path 0 -1)
+                                   base-path)
+              ; Try with .html extension
+              html (or html (try-html-file (str base-path-no-slash ".html")))
+              ; Try with /index.html
               html (or html (try-html-file (path/join base-path "index.html")))]
         html))))
 
