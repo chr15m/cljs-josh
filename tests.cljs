@@ -278,7 +278,10 @@
                               (fn [e]
                                 (js/console.log "Non-existent path error caught as expected")
                                 e))
-              _ (js/console.log "Non-existent path test completed")
+              not-found-status (if (instance? js/Error not-found-res)
+                                 404  ; Assume 404 if we got an error
+                                 (.-status not-found-res))
+              _ (js/console.log "Non-existent path test completed with status:" not-found-status)
 
               ;; Test root path without extension
               _ (js/console.log "Testing root path without extension")
@@ -325,6 +328,11 @@
         ;; Verify top-level root path resolves to index.html
         (is (.includes top-root-content "Scittle Example")
             "Should serve index.html for top-level root path")
+
+        ;; Verify non-existent path returns 404 or error
+        (is (or (= not-found-status 404)
+                (instance? js/Error not-found-res))
+            "Should return 404 or error for non-existent path")
 
         ;; Clean up test files and stop server
         (delete-test-dir test-dir)
