@@ -3,11 +3,11 @@
   (:require
     ["fs" :as fs]
     ["path" :as path]
-    ["process" :refer [env]]
+    ;["process" :refer [env]]
     ["child_process" :as child-process]
     [clojure.test :refer [deftest async is] :as t]
     [promesa.core :as p]
-    [applied-science.js-interop :as j]
+    ;[applied-science.js-interop :as j]
     [clojure.tools.cli :as cli]))
 
 (t/use-fixtures
@@ -222,7 +222,7 @@
                                          (resolve true))))))
 
               ;; Create various test files
-              root-html (create-test-file
+              _root-html (create-test-file
                           (path/join test-dir "root.html")
                           "<html><body><h1>Root HTML</h1></body></html>")
 
@@ -234,11 +234,11 @@
                                          (reject err)
                                          (resolve true))))))
 
-              subdir-html (create-test-file
+              _subdir-html (create-test-file
                             (path/join subdir "page.html")
                             "<html><body><h1>Subdir Page</h1></body></html>")
 
-              index-html (create-test-file
+              _index-html (create-test-file
                            (path/join subdir "index.html")
                            "<html><body><h1>Subdir Index</h1></body></html>")
 
