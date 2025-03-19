@@ -219,8 +219,9 @@
                                 (.endsWith f ".cljs")
                                 (try
                                   (fs-sync/accessSync
-                                    f fs-sync/constants.X_OK)
-                                  (catch :default _e true)))))
+                                    f fs-sync/constants.R_OK)
+                                  true
+                                  (catch :default _e)))))
                         :recursive true}
                    #(frontend-file-changed %1 %2))
             ; launch the webserver

@@ -13,7 +13,8 @@
     "node-watch": "^0.7.4"
   },
   "scripts": {
-    "prepare": "jq --argjson files \"$(git ls-files | jq -R . | jq -s .)\" '.files = $files' package.json > .package-tmp.json && mv .package-tmp.json package.json"
+    "prepare": "node -e \"if (process.platform !== 'win32') { require('child_process').execSync('npm run prepare:posix', { stdio: 'inherit' }); } else { console.log('Skipping prepare on Windows'); }\"",
+    "prepare:posix": "jq --argjson files \"$(git ls-files | jq -R . | jq -s .)\" '.files = $files' package.json > .package-tmp.json && mv .package-tmp.json package.json"
   },
   "files": [
     ".gitignore",
