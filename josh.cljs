@@ -223,7 +223,9 @@
                                   true
                                   (catch :default _e)))))
                         :recursive true}
-                   #(frontend-file-changed %1 %2))
+                   (fn [event-type filepath]
+                     (let [filepath-rel (path/relative dir filepath)]
+                       (frontend-file-changed event-type filepath-rel))))
             ; launch the webserver
             (let [app (express)] 
               (.get app "/*" #(html-injector %1 %2 %3 dir))
