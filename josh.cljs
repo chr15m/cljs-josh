@@ -192,6 +192,14 @@
            (p/all))
       (js/console.log "Now run josh to serve this folder."))))
 
+(defn spath->posix
+  "Converts SPATH to a POSIX-style path with '/' separators and returns
+  it."
+  [spath]
+  (if (= os/path "/")
+    spath
+    (.join (.split spath path/sep) "/")))
+
 (defn main
   [& args]
   (let [{:keys [errors options summary]} (cli/parse-opts args cli-options)]
@@ -224,8 +232,9 @@
                                   (catch :default _e)))))
                         :recursive true}
                    (fn [event-type filepath]
-                     (let [filepath-rel (path/relative dir filepath)]
-                       (frontend-file-changed event-type filepath-rel))))
+                     (let [filepath-rel (path/relative dir filepath)
+                           filepath-posix (spath->posix filepath-rel)]
+                       (frontend-file-changed event-type filepath-posix))))
             ; launch the webserver
             (let [app (express)] 
               (.get app "/*" #(html-injector %1 %2 %3 dir))
