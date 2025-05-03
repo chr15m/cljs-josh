@@ -117,7 +117,8 @@
            (aset conn "onerror"
                  (fn [ev]
                    (js/console.error "SSE connection closed.")
-                   (when (= (aget conn "readyState") (aget js/EventSource "CLOSED"))
+                   (when (= (aget conn "readyState")
+                            (aget js/EventSource "CLOSED"))
                      (js/console.error "Creating new SSE connection.")
                      (js/setTimeout
                        #(setup-sse-connection)
@@ -163,7 +164,8 @@
     :default default-port
     :parse-fn js/Number
     :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
-   ["-i" "--init" "Set up a basic Scittle project. Copies an html, cljs, and css file into the current folder."]
+   ["-i" "--init" (str "Set up a basic Scittle project. Copies an html,"
+                       "cljs, and css file into the current folder.")]
    ["-h" "--help"]])
 
 (defonce handle-error
@@ -193,8 +195,7 @@
       (js/console.log "Now run josh to serve this folder."))))
 
 (defn spath->posix
-  "Converts SPATH to a POSIX-style path with '/' separators and returns
-  it."
+  "Converts SPATH to a POSIX-style path with '/' separators and returns it."
   [spath]
   (if (= os/path "/")
     spath
