@@ -17,7 +17,7 @@ You can also install the `josh` command globally: `npm i -g cljs-josh`.
 
 Bootstrap a basic Scittle project with `josh --init`.
 
-### Example
+## Example project
 
 See [the example](./example) for a basic project to start with.
 
@@ -28,7 +28,12 @@ cd example
 npx josh
 ```
 
-### Features
+## Tips
+
+- Install `josh` globally with `npm i -g cljs-josh` and then you can just use `josh` to run it.
+- Use `josh --init` to download and install the example template into the current folder.
+
+## Features
 
 I wanted a Scittle dev experience with these features:
 
