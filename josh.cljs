@@ -1,3 +1,4 @@
+#!/usr/bin/env -S npx nbb
 (ns josh
   {:clj-kondo/config '{:lint-as {promesa.core/let clojure.core/let}}}
   (:require
@@ -215,10 +216,11 @@
           (let [port (:port options)
                 dir (:dir options)]
             ; watch this server itself
-            (watch #js [*file*]
-                   (fn [_event-type filename]
-                     (js/console.log "Reloading" filename)
-                     (load-file filename)))
+            (when *file*
+              (watch #js [*file*]
+                     (fn [_event-type filename]
+                       (js/console.log "Reloading" filename)
+                       (load-file filename))))
             ; watch served frontend filem
             (watch dir
                    #js {:filter
@@ -250,5 +252,13 @@
                                                (get-local-ip-addresses)))]
                            (js/console.log (str "- http://" ip ":" port))))))))))
 
+(defn get-args [argv]
+  (not-empty (js->clj (.slice argv
+                              (if
+                                (.endsWith
+                                  (or (aget argv 1) "")
+                                  "node_modules/nbb/cli.js")
+                                3 2)))))
+
 (defonce started
-  (apply main (not-empty (js->clj (.slice js/process.argv 2)))))
+  (apply main (not-empty (get-args js/process.argv))))
