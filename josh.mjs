@@ -2,9 +2,10 @@
 
 import { addClassPath, loadFile } from 'nbb';
 import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { dirname, basename, resolve } from 'path';
 
 const __dirname = fileURLToPath(dirname(import.meta.url));
+const __filename = basename(import.meta.url);
 
 addClassPath(resolve(__dirname));
-const josh = await loadFile(resolve(__dirname, 'josh.cljs'));
+await loadFile(resolve(__dirname, __filename.replace(".mjs", ".cljs")));
