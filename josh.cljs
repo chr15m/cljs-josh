@@ -2,11 +2,17 @@
 (ns josh
   {:clj-kondo/config '{:lint-as {promesa.core/let clojure.core/let}}}
   (:require
+    [clojure.edn :as edn]
+    [clojure.string :as str]
     [clojure.tools.cli :as cli]
+    ["bencode" :as bencode]
+    ["net" :as net]
+    ["ws" :refer [WebSocketServer]]
     ["os" :as os]
     ["path" :as path]
     ["fs/promises" :as fs]
     ["fs" :as fs-sync]
+    ["process" :refer [cwd argv]]
     [applied-science.js-interop :as j]
     [promesa.core :as p]
     ["node-watch$default" :as watch]
@@ -72,6 +78,133 @@
                             (js/JSON.stringify
                               (clj->js msg))
                             "\n\n"))))
+
+;;; nREPL server ;;;
+
+(defonce nrepl-ws-channel (atom nil))
+(defonce nrepl-sessions (atom {}))
+(defonce ws-port (atom nil))
+
+(defn- send-bencode [out response]
+  (.write out (bencode/encode response)))
+
+(defn- forward-to-browser [socket msg-clj]
+  (if-let [ws @nrepl-ws-channel]
+    (.send ws (pr-str msg-clj))
+    (let [response (clj->js {:status ["error" "done"]
+                             :err "No browser connected."
+                             :id (:id msg-clj)
+                             :session (:session msg-clj)})]
+      (js/console.error "nREPL: No browser connected, sending error to client.")
+      (send-bencode socket response))))
+
+(defn- handle-nrepl-message [socket msg]
+  (let [msg-clj (js->clj msg :keywordize-keys true)
+        op (:op msg-clj)]
+    (case op
+      "clone" (let [session-id (str (random-uuid))
+                    response (clj->js {:new-session session-id
+                                       :status ["done"]
+                                       :id (:id msg-clj)})]
+                (swap! nrepl-sessions assoc session-id socket)
+                (send-bencode socket response))
+
+      "describe" (let [response (clj->js {:ops {"clone" {} "describe" {} "eval" {} "load-file" {}}
+                                           :versions {"josh" "0.0.1"
+                                                      "nrepl" "0.9.0"}
+                                           :status ["done"]
+                                           :id (:id msg-clj)})]
+                   (send-bencode socket response))
+
+      "eval" (if (or (str/includes? (:code msg-clj "") "clojure.main/repl-requires")
+                     (str/includes? (:code msg-clj "") "System/getProperty"))
+               (let [session-id (:session msg-clj)]
+                 (send-bencode socket (clj->js {:value "nil", :id (:id msg-clj), :session session-id}))
+                 (send-bencode socket (clj->js {:status ["done"], :id (:id msg-clj), :session session-id})))
+               (forward-to-browser socket msg-clj))
+
+      (forward-to-browser socket msg-clj))))
+
+(defn- handle-nrepl-client [socket]
+  (.on socket "close" (fn []
+                        (js/console.log "nREPL client disconnected.")
+                        (let [to-remove (->> @nrepl-sessions
+                                             (filter (fn [[_v s]] (= s socket)))
+                                             (map first))]
+                          (swap! nrepl-sessions #(apply dissoc % to-remove)))))
+  (let [buffer (atom (js/Buffer.alloc 0))]
+    (.on socket "data"
+         (fn [data]
+           (swap! buffer #(js/Buffer.concat (clj->js [% data])))
+           (loop [continue? true]
+             (when (and continue? (> (.-length @buffer) 0))
+               (let [decoded (try
+                               (let [msg (bencode/decode @buffer)
+                                     bytes (j/get bencode/decode "bytes")]
+                                 {:msg msg :bytes bytes})
+                               (catch js/Error _e nil))]
+                 (if decoded
+                   (do
+                     (handle-nrepl-message socket (:msg decoded))
+                     (swap! buffer #(.slice % (:bytes decoded)))
+                     (recur true))
+                   (recur false)))))))))
+
+(defn- start-nrepl-server! [port host]
+  (let [server (net/createServer #(handle-nrepl-client %))]
+    (.listen server port host
+             (fn []
+               (let [port-file-path (path/join (cwd) ".nrepl-port")]
+                 (fs/writeFile port-file-path (str port)))
+               (js/console.log (str "nREPL server started on port " port " on host " host " - nrepl://" host ":" port))))))
+
+(defn- start-ws-server! [port]
+  (let [ws-server (WebSocketServer. (clj->js {:port port}))]
+    (.on ws-server "connection"
+         (fn [ws]
+           (js/console.log "nREPL browser connected.")
+           (reset! nrepl-ws-channel ws)
+           (.on ws "message"
+                (fn [message]
+                  (let [response (edn/read-string (.toString message))
+                        session-id (:session response)
+                        socket (get @nrepl-sessions session-id)]
+                    (if socket
+                      (send-bencode socket (clj->js response))
+                      (js/console.error "nREPL: No socket for session" session-id)))))
+           (.on ws "close" #(do (js/console.log "nREPL browser disconnected.")
+                                (reset! nrepl-ws-channel nil)))))
+    (print "start-ws-server!")
+    true
+    ))
+
+(defn- get-free-port []
+  (js/Promise.
+    (fn [res]
+      (let [server (net/createServer)]
+        (.once server "listening"
+               (fn []
+                 (let [port (j/get (.address server) "port")]
+                   (.close server #(res port)))))
+        (.listen server 0)))))
+
+(defn- read-nrepl-config []
+  (let [local-config ".nrepl.edn"
+        home (os/homedir)
+        global-config (when home (path/join home ".nrepl" "nrepl.edn"))
+        config-path (if (fs-sync/existsSync local-config)
+                      local-config
+                      (when (and global-config (fs-sync/existsSync global-config))
+                        global-config))]
+    (when config-path
+      (try
+        (-> config-path
+            fs-sync/readFileSync
+            .toString
+            edn/read-string)
+        (catch js/Error e
+          (js/console.error "Error reading" config-path e)
+          nil)))))
 
 (def loader
   '(defonce _josh-reloader
@@ -143,12 +276,22 @@
   ; intercept static requests to html and inject the loader script
   (p/let [html (find-html req dir)]
     (if html
-      (let [injected-html (.replace html #"(?i)</body>"
-                                    (str
-                                      "<script type='application/x-scittle'>"
-                                      (pr-str loader)
-                                      "</script></body>"))]
-        ;(js/console.log "Intercepted" (j/get req :path))
+      (let [scittle-tag-match
+            (re-find #"(?i)<script[^>]+src\s*=\s*['\"]([^'\"]*scittle(?:\.min)?\.js)['\"][^>]*>" html)
+            scittle-js-url (when scittle-tag-match (second scittle-tag-match))
+            nrepl-scripts
+            (when scittle-js-url
+              (str
+                "<script>var SCITTLE_NREPL_WEBSOCKET_PORT = "
+                @ws-port ";</script>"
+                "<script src=\"" (str/replace scittle-js-url "scittle."
+                                              "scittle.nrepl.")
+                "\" type=\"application/javascript\"></script>"))
+            loader-script (str "<script type='application/x-scittle'>"
+                               (pr-str loader) "</script>")
+            injected-html
+            (.replace html #"(?i)</body>"
+                      (str nrepl-scripts loader-script "</body>"))]
         (.send res injected-html))
       (done))))
 
@@ -167,7 +310,8 @@
     :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
    ["-i" "--init" (str "Set up a basic Scittle project. Copies an html,"
                        "cljs, and css file into the current folder.")]
-   ["-h" "--help"]])
+   ["-h" "--help"]
+   [nil "--prod" "Disable live-reloading and nREPL for production."]])
 
 (defonce handle-error
   (.on js/process "uncaughtException"
@@ -213,44 +357,56 @@
           (:init options)
           (install-examples)
           :else
-          (let [port (:port options)
-                dir (:dir options)]
-            ; watch this server itself
-            (when *file*
-              (watch #js [*file*]
-                     (fn [_event-type filename]
-                       (js/console.log "Reloading" filename)
-                       (load-file filename))))
-            ; watch served frontend filem
-            (watch dir
-                   #js {:filter
-                        (fn [f]
-                          (or (.endsWith f ".css")
-                              (and
-                                (.endsWith f ".cljs")
-                                (try
-                                  (fs-sync/accessSync
-                                    f fs-sync/constants.R_OK)
-                                  true
-                                  (catch :default _e)))))
-                        :recursive true}
-                   (fn [event-type filepath]
-                     (let [filepath-rel (path/relative dir filepath)
-                           filepath-posix (spath->posix filepath-rel)]
-                       (frontend-file-changed event-type filepath-posix))))
-            ; launch the webserver
-            (let [app (express)] 
-              (.get app "/*" #(html-injector %1 %2 %3 dir))
-              (.use app (.static express dir))
-              (.use app "/_cljs-josh" #(sse-handler %1 %2))
-              (.listen app port
-                       (fn []
-                         (js/console.log (str "Serving " dir
-                                              " on port " port ":"))
-                         (doseq [ip (reverse
-                                      (sort-by count
-                                               (get-local-ip-addresses)))]
-                           (js/console.log (str "- http://" ip ":" port))))))))))
+          (p/catch
+            (p/let [port (:port options)
+                    dir (:dir options)
+                    prod? (:prod options)]
+              (when-not prod?
+                (p/let [config (read-nrepl-config)
+                        nrepl-p (or (get config :port) (get-free-port))
+                        ws-p (or (get config :ws-port) (get-free-port))]
+                  (reset! ws-port ws-p)
+                  (start-nrepl-server! nrepl-p (get config :bind "127.0.0.1"))
+                  (start-ws-server! ws-p)
+                  ; watch this server itself
+                  (when *file*
+                    (watch #js [*file*]
+                           (fn [_event-type filename]
+                             (js/console.log "Reloading" filename)
+                             (load-file filename))))
+                  ; watch served frontend filem
+                  (watch dir
+                         #js {:filter
+                              (fn [f]
+                                (or (.endsWith f ".css")
+                                    (and
+                                      (.endsWith f ".cljs")
+                                      (try
+                                        (fs-sync/accessSync
+                                          f fs-sync/constants.R_OK)
+                                        true
+                                        (catch :default _e)))))
+                              :recursive true}
+                         (fn [event-type filepath]
+                           (let [filepath-rel (path/relative dir filepath)
+                                 filepath-posix (spath->posix filepath-rel)]
+                             (frontend-file-changed event-type filepath-posix))))))
+              ; launch the webserver
+              (let [app (express)]
+                (when-not prod?
+                  (.get app "/*" #(html-injector %1 %2 %3 dir)))
+                (.use app (.static express dir))
+                (when-not prod?
+                  (.use app "/_cljs-josh" #(sse-handler %1 %2)))
+                (.listen app port
+                         (fn []
+                           (js/console.log (str "Serving " dir
+                                                " on port " port ":"))
+                           (doseq [ip (reverse
+                                        (sort-by count
+                                                 (get-local-ip-addresses)))]
+                             (js/console.log (str "- http://" ip ":" port)))))))
+            #(js/console.error %)))))
 
 (defn get-args [argv]
   (not-empty (js->clj (.slice argv
@@ -261,4 +417,4 @@
                                 3 2)))))
 
 (defonce started
-  (apply main (not-empty (get-args js/process.argv))))
+  (apply main (not-empty (get-args argv))))
