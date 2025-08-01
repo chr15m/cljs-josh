@@ -251,9 +251,7 @@
                       (send-bencode socket (clj->js response))
                       (js/console.error "nREPL: No socket for session" session-id)))))
            (.on ws "close" #(do (js/console.log "nREPL browser disconnected.")
-                                (reset! nrepl-ws-channel nil)))))
-    true
-    ))
+                                (reset! nrepl-ws-channel nil)))))))
 
 (defn- get-free-port []
   (js/Promise.
