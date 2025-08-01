@@ -130,9 +130,10 @@
     (js/console.log "nREPL in:" (clj->js msg-clj))
     (case op
       :clone (let [session-id (str (random-uuid))
-                   response (clj->js {:new-session session-id
-                                      :status ["done"]
-                                      :id (:id msg-clj)})]
+                   response (clj->js (cond-> {:new-session session-id
+                                              :status ["done"]
+                                              :id (:id msg-clj)}
+                                       (:session msg-clj) (assoc :session (:session msg-clj))))]
                (swap! nrepl-sessions assoc session-id socket)
                (send-bencode socket response))
 
@@ -140,36 +141,45 @@
                       [major minor incremental] (str/split node-version #"\.")
                       response
                       (clj->js
-                        {:versions {"nbb-nrepl" {"major" "TODO"
-                                                 "version-string" "TODO"}
-                                    "node" {"major" (str "v" major)
-                                            "minor" minor
-                                            "incremental" incremental
-                                            "version-string"
-                                            (str "v" node-version)}}
-                         :ops (zipmap
-                                (map name [;:classpath
-                                           :clone
-                                           :close
-                                           :complete
-                                           :describe
-                                           :eldo
-                                           :eval
-                                           :info
-                                           :load-file
-                                           :lookup
-                                           :macroexpand])
-                                (repeat {}))
-                         :aux {}
-                         :status ["done"]
-                         :id (:id msg-clj)})]
+                        (cond->
+                          {:versions {"nbb-nrepl" {"major" "TODO"
+                                                   "version-string" "TODO"}
+                                      "node" {"major" (str "v" major)
+                                              "minor" minor
+                                              "incremental" incremental
+                                              "version-string"
+                                              (str "v" node-version)}}
+                           :ops (zipmap
+                                  (map name [:classpath
+                                             :clone
+                                             :close
+                                             :complete
+                                             :describe
+                                             :eldo
+                                             :eval
+                                             :info
+                                             :load-file
+                                             :lookup
+                                             :macroexpand])
+                                  (repeat {}))
+                           :aux {}
+                           :status ["done"]
+                           :id (:id msg-clj)}
+                          (:session msg-clj) (assoc :session (:session msg-clj))))]
                   (send-bencode socket response))
 
       :eval (do-eval socket msg-clj)
 
       :load-file (do-eval socket (assoc msg-clj :code (:file msg-clj)))
 
-      (:classpath :macroexpand) (forward-to-browser socket msg-clj)
+      :classpath (let [response (clj->js
+                                  (cond-> {:classpath [(cwd)]
+                                           :status ["done"]
+                                           :id (:id msg-clj)}
+                                    (:session msg-clj) (assoc :session (:session msg-clj))))]
+                   (send-bencode socket response))
+
+      :macroexpand (forward-to-browser socket msg-clj)
 
       (forward-to-browser socket msg-clj))))
 
