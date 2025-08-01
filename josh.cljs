@@ -87,11 +87,11 @@
 (defonce ws-port (atom nil))
 
 (defn- send-bencode [out response]
-  (js/console.log "nREPL out:" response)
+  ;(js/console.log "nREPL out:" response)
   (.write out (bencode/encode response)))
 
 (defn- forward-to-browser [socket msg-clj]
-  (js/console.log "nREPL -> browser:" (clj->js msg-clj))
+  ;(js/console.log "nREPL -> browser:" (clj->js msg-clj))
   (if-let [ws @nrepl-ws-channel]
     (.send ws (pr-str msg-clj))
     (let [session-id (:session msg-clj)
@@ -127,7 +127,7 @@
 (defn- handle-nrepl-message [socket msg]
   (let [msg-clj (js->clj msg :keywordize-keys true)
         op (keyword (:op msg-clj))]
-    (js/console.log "nREPL in:" (clj->js msg-clj))
+    ;(js/console.log "nREPL in:" (clj->js msg-clj))
     (case op
       :clone (let [session-id (str (random-uuid))
                    response (clj->js (cond-> {:new-session session-id
@@ -205,7 +205,7 @@
   (let [buffer (atom (js/Buffer.alloc 0))]
     (.on socket "data"
          (fn [data]
-           (js/console.log "socket data:" (.toString data))
+           ;(js/console.log "socket data:" (.toString data))
            (swap! buffer #(js/Buffer.concat (clj->js [% data])))
            (loop []
              (when (> (.-length @buffer) 0)
@@ -246,7 +246,7 @@
                                    (when (and (not session-id)
                                               (= 1 (count @nrepl-sockets)))
                                      (first @nrepl-sockets)))]
-                    (js/console.log "browser -> nREPL:" (clj->js response))
+                    ;(js/console.log "browser -> nREPL:" (clj->js response))
                     (if socket
                       (send-bencode socket (clj->js response))
                       (js/console.error "nREPL: No socket for session" session-id)))))
