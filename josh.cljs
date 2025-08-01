@@ -179,6 +179,14 @@
                                     (:session msg-clj) (assoc :session (:session msg-clj))))]
                    (send-bencode socket response))
 
+      :close (let [{:keys [session id]} msg-clj]
+               (when session
+                 (swap! nrepl-sessions dissoc session))
+               (let [response (clj->js (cond-> {:status ["done" "session-closed"]
+                                                :id id}
+                                         session (assoc :session session)))]
+                 (send-bencode socket response)))
+
       :macroexpand (forward-to-browser socket msg-clj)
 
       (forward-to-browser socket msg-clj))))
