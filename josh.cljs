@@ -142,7 +142,9 @@
                       response
                       (clj->js
                         (cond->
-                          {:versions {"nbb-nrepl" {"major" "TODO"
+                          {:versions {"scittle" {"major" "TODO"
+                                                 "version-string" "TODO"}
+                                      "cljs-josh" {"major" "TODO"
                                                    "version-string" "TODO"}
                                       "node" {"major" (str "v" major)
                                               "minor" minor
