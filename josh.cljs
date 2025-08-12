@@ -60,20 +60,33 @@
   (let [code (:code msg-clj)
         session-id (:session msg-clj)
         id (:id msg-clj)]
-    (if (and code (or (str/includes? code "clojure.main/repl-requires")
-                      (str/includes? code "System/getProperty")))
-      (let [value-resp (cond-> {:value "nil" :id id}
-                         session-id (assoc :session session-id))
-            status-resp (cond-> {:status ["done"] :id id}
-                          session-id (assoc :session session-id))]
+    (cond
+      (and (not @nrepl-ws-channel) (= code "*ns*"))
+      (do
+        (js/console.log "nREPL: Intercepted *ns* eval with no browser, returning cljs.user.")
+        (send-bencode socket (clj->js (cond-> {:value "\"cljs.user\"" :id id}
+                                        session-id (assoc :session session-id))))
+        (send-bencode socket (clj->js (cond-> {:ns "cljs.user" :id id}
+                                        session-id (assoc :session session-id))))
+        (send-bencode socket (clj->js (cond-> {:status ["done"] :id id}
+                                        session-id (assoc :session session-id)))))
+
+      (and code (or (str/includes? code "clojure.main/repl-requires")
+                    (str/includes? code "System/getProperty")))
+      (do
         (js/console.log "nREPL: Intercepted clojure.main/repl-requires or System/getProperty")
-        (send-bencode socket (clj->js value-resp))
-        (send-bencode socket (clj->js status-resp)))
+        (send-bencode socket (clj->js (cond-> {:value "nil" :id id}
+                                        session-id (assoc :session session-id))))
+        (send-bencode socket (clj->js (cond-> {:status ["done"] :id id}
+                                        session-id (assoc :session session-id)))))
+
+      :else
       (forward-to-browser socket (assoc msg-clj :op :eval)))))
 
 (defn- handle-nrepl-message [socket msg]
   (let [msg-clj (js->clj msg :keywordize-keys true)
         op (keyword (:op msg-clj))]
+    ;(print msg-clj)
     (case op
       :clone (let [session-id (str (random-uuid))
                    response (clj->js (cond-> {:new-session session-id
