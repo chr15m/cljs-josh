@@ -495,12 +495,27 @@
             #(js/console.error %)))))
 
 (defn get-args [argv]
-  (not-empty (js->clj (.slice argv
-                              (if
-                                (.endsWith
-                                  (or (aget argv 1) "")
-                                  "node_modules/nbb/cli.js")
-                                3 2)))))
+  (if *file*
+    (let [argv-vec (mapv
+                     #(try (fs-sync/realpathSync %)
+                           (catch :default _e %))
+                     (js->clj argv))
+          script-idx (.indexOf argv-vec *file*)]
+      ;(print "script-idx" script-idx)
+      ;(print argv-vec)
+      ;(print *file*)
+      (when (>= script-idx 0)
+        (not-empty (subvec argv-vec (inc script-idx)))))
+    (not-empty (js->clj (.slice argv
+                                (if
+                                  (or
+                                    (.endsWith
+                                      (or (aget argv 1) "")
+                                      "node_modules/nbb/cli.js")
+                                    (.endsWith
+                                      (or (aget argv 1) "")
+                                      "/bin/nbb"))
+                                  3 2))))))
 
 (defonce started
   (apply main (not-empty (get-args argv))))
