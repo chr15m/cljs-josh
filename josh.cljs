@@ -26,6 +26,8 @@
 ; test </BODY> and </body>
 
 (def default-port 8000)
+(def scittle-tag-re
+  #"(?i)<script[^>]+src\s*=\s*['\"]([^'\"]*scittle(?:\.min)?\.js)['\"][^>]*>")
 
 (defonce connections (atom #{}))
 
@@ -62,22 +64,29 @@
     (cond
       (and (not @nrepl-ws-channel) (= code "*ns*"))
       (do
-        (js/console.log "nREPL: Intercepted *ns* eval with no browser, returning cljs.user.")
-        (send-bencode socket (clj->js (cond-> {:value "\"cljs.user\"" :id id}
-                                        session-id (assoc :session session-id))))
-        (send-bencode socket (clj->js (cond-> {:ns "cljs.user" :id id}
-                                        session-id (assoc :session session-id))))
-        (send-bencode socket (clj->js (cond-> {:status ["done"] :id id}
-                                        session-id (assoc :session session-id)))))
+        (js/console.log
+          "nREPL: Intercepted *ns* eval with no browser, returning cljs.user.")
+        (send-bencode socket
+                      (clj->js (cond-> {:value "\"cljs.user\"" :id id}
+                                 session-id (assoc :session session-id))))
+        (send-bencode socket
+                      (clj->js (cond-> {:ns "cljs.user" :id id}
+                                 session-id (assoc :session session-id))))
+        (send-bencode socket
+                      (clj->js (cond-> {:status ["done"] :id id}
+                                 session-id (assoc :session session-id)))))
 
       (and code (or (str/includes? code "clojure.main/repl-requires")
                     (str/includes? code "System/getProperty")))
       (do
-        (js/console.log "nREPL: Intercepted clojure.main/repl-requires or System/getProperty")
-        (send-bencode socket (clj->js (cond-> {:value "nil" :id id}
-                                        session-id (assoc :session session-id))))
-        (send-bencode socket (clj->js (cond-> {:status ["done"] :id id}
-                                        session-id (assoc :session session-id)))))
+        (js/console.log
+          "nREPL: Intercepted clojure.main/repl-requires or System/getProperty")
+        (send-bencode socket
+                      (clj->js (cond-> {:value "nil" :id id}
+                                 session-id (assoc :session session-id))))
+        (send-bencode socket
+                      (clj->js (cond-> {:status ["done"] :id id}
+                                 session-id (assoc :session session-id)))))
 
       :else
       (forward-to-browser socket (assoc msg-clj :op :eval)))))
@@ -91,7 +100,8 @@
                    response (clj->js (cond-> {:new-session session-id
                                               :status ["done"]
                                               :id (:id msg-clj)}
-                                       (:session msg-clj) (assoc :session (:session msg-clj))))]
+                                       (:session msg-clj)
+                                       (assoc :session (:session msg-clj))))]
                (swap! nrepl-sessions assoc session-id socket)
                (send-bencode socket response))
 
@@ -125,7 +135,8 @@
                            :aux {}
                            :status ["done"]
                            :id (:id msg-clj)}
-                          (:session msg-clj) (assoc :session (:session msg-clj))))]
+                          (:session msg-clj)
+                          (assoc :session (:session msg-clj))))]
                   (send-bencode socket response))
 
       :eval (do-eval socket msg-clj)
@@ -136,15 +147,17 @@
                                   (cond-> {:classpath []
                                            :status ["done"]
                                            :id (:id msg-clj)}
-                                    (:session msg-clj) (assoc :session (:session msg-clj))))]
+                                    (:session msg-clj)
+                                    (assoc :session (:session msg-clj))))]
                    (send-bencode socket response))
 
       :close (let [{:keys [session id]} msg-clj]
                (when session
                  (swap! nrepl-sessions dissoc session))
-               (let [response (clj->js (cond-> {:status ["done" "session-closed"]
-                                                :id id}
-                                         session (assoc :session session)))]
+               (let [response (clj->js
+                                (cond-> {:status ["done" "session-closed"]
+                                         :id id}
+                                  session (assoc :session session)))]
                  (send-bencode socket response)))
 
       :macroexpand (forward-to-browser socket msg-clj)
@@ -169,10 +182,15 @@
                (let [msg (try
                            (bencode/decode @buffer "utf8")
                            (catch js/Error e
-                             (when-not (or (str/includes? (.-message e) "Unexpected end of buffer")
-                                           (str/includes? (.-message e) "Not a string")
-                                           (str/includes? (.-message e) "Invalid data"))
-                               (js/console.error "nREPL stream error, closing connection:" e)
+                             (when-not
+                               (or (str/includes? (.-message e)
+                                                  "Unexpected end of buffer")
+                                   (str/includes? (.-message e)
+                                                  "Not a string")
+                                   (str/includes? (.-message e)
+                                                  "Invalid data"))
+                               (js/console.error
+                                 "nREPL stream error, closing connection:" e)
                                (.end socket))
                              :decode-error))]
                  (when (not= msg :decode-error)
@@ -187,7 +205,9 @@
              (fn []
                (let [port-file-path (path/join (cwd) ".nrepl-port")]
                  (fs/writeFile port-file-path (str port)))
-               (js/console.log (str "nREPL server started on port " port " on host " host " - nrepl://" host ":" port))))))
+               (js/console.log
+                 (str "nREPL server started on port " port
+                      " on host " host " - nrepl://" host ":" port))))))
 
 (defn start-ws-server! [port]
   (let [ws-server (WebSocketServer. (clj->js {:port port}))]
@@ -205,7 +225,8 @@
                                      (first @nrepl-sockets)))]
                     (if socket
                       (send-bencode socket (clj->js response))
-                      (js/console.error "nREPL: No socket for session" session-id)))))
+                      (js/console.error
+                        "nREPL: No socket for session" session-id)))))
            (.on ws "close" #(do (js/console.log "nREPL browser disconnected.")
                                 (reset! nrepl-ws-channel nil)))))))
 
@@ -279,7 +300,8 @@
         global-config (when home (path/join home ".nrepl" "nrepl.edn"))
         config-path (if (fs-sync/existsSync local-config)
                       local-config
-                      (when (and global-config (fs-sync/existsSync global-config))
+                      (when (and global-config
+                                 (fs-sync/existsSync global-config))
                         global-config))]
     (when config-path
       (try
@@ -362,7 +384,7 @@
   (p/let [html (find-html req dir)]
     (if html
       (let [scittle-tag-match
-            (re-find #"(?i)<script[^>]+src\s*=\s*['\"]([^'\"]*scittle(?:\.min)?\.js)['\"][^>]*>" html)
+            (re-find scittle-tag-re html)
             scittle-js-url (when scittle-tag-match (second scittle-tag-match))
             nrepl-scripts
             (when scittle-js-url
@@ -401,7 +423,7 @@
 (defonce handle-error
   (.on js/process "uncaughtException"
        (fn [error]
-        (js/console.error error))))
+         (js/console.error error))))
 
 (defn print-usage [summary]
   (print "Program options:")
