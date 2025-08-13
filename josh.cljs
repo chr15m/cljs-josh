@@ -34,7 +34,6 @@
 (defonce nrepl-ws-channel (atom nil))
 (defonce nrepl-sessions (atom {}))
 (defonce nrepl-sockets (atom #{}))
-(defonce ws-port (atom nil))
 
 (defn- send-bencode [out response]
   (.write out (bencode/encode response)))
@@ -191,7 +190,6 @@
                (js/console.log (str "nREPL server started on port " port " on host " host " - nrepl://" host ":" port))))))
 
 (defn start-ws-server! [port]
-  (reset! ws-port port)
   (let [ws-server (WebSocketServer. (clj->js {:port port}))]
     (.on ws-server "connection"
          (fn [ws]
@@ -359,7 +357,7 @@
 
        (setup-sse-connection))))
 
-(defn html-injector [req res done dir]
+(defn html-injector [req res done dir ws-port]
   ; intercept static requests to html and inject the loader script
   (p/let [html (find-html req dir)]
     (if html
@@ -370,7 +368,7 @@
             (when scittle-js-url
               (str
                 "<script>var SCITTLE_NREPL_WEBSOCKET_PORT = "
-                @ws-port ";</script>"
+                ws-port ";</script>"
                 "<script src=\"" (str/replace scittle-js-url "scittle."
                                               "scittle.nrepl.")
                 "\" type=\"application/javascript\"></script>"))
@@ -433,6 +431,61 @@
     spath
     (.join (.split spath path/sep) "/")))
 
+(defn start-watchers [dir]
+  ; watch this server itself
+  (when *file*
+    (watch #js [*file*]
+           (fn [_event-type filename]
+             (js/console.log "Reloading" filename)
+             (load-file filename))))
+  ; watch served frontend files
+  (watch dir
+         #js {:filter
+              (fn [f]
+                (or (.endsWith f ".css")
+                    (and
+                      (.endsWith f ".cljs")
+                      (try
+                        (fs-sync/accessSync
+                          f fs-sync/constants.R_OK)
+                        true
+                        (catch :default _e)))))
+              :recursive true}
+         (fn [event-type filepath]
+           (let [filepath-rel (path/relative dir filepath)
+                 filepath-posix (spath->posix filepath-rel)]
+             (frontend-file-changed event-type filepath-posix)))))
+
+(defn start-webserver [app dir port]
+  ; launch the webserver
+  (.use app (.static express dir))
+  (.listen app port
+           (fn []
+             (js/console.log (str "Serving " dir
+                                  " on port " port ":"))
+             (doseq [ip (reverse
+                          (sort-by count
+                                   (get-local-ip-addresses)))]
+               (js/console.log (str "- http://" ip ":" port))))))
+
+(defn run-servers [options]
+  (p/catch
+    (p/let [port (:port options)
+            dir (:dir options)
+            prod? (:prod options)
+            app (express)]
+      (when-not prod?
+        (p/let [config (read-nrepl-config)
+                nrepl-p (or (get config :port) (get-free-port))
+                ws-p (or (get config :ws-port) (get-free-port))]
+          (start-nrepl-server! nrepl-p (get config :bind "127.0.0.1"))
+          (start-ws-server! ws-p)
+          (start-watchers dir)
+          (.get app "/*" #(html-injector %1 %2 %3 dir ws-p))
+          (.use app "/_cljs-josh" #(sse-handler %1 %2))))
+      (start-webserver app dir port))
+    #(js/console.error %)))
+
 (defn main
   [& args]
   (let [{:keys [errors options summary]} (cli/parse-opts args cli-options)]
@@ -444,55 +497,7 @@
           (:init options)
           (install-examples)
           :else
-          (p/catch
-            (p/let [port (:port options)
-                    dir (:dir options)
-                    prod? (:prod options)]
-              (when-not prod?
-                (p/let [config (read-nrepl-config)
-                        nrepl-p (or (get config :port) (get-free-port))
-                        ws-p (or (get config :ws-port) (get-free-port))]
-                  (start-nrepl-server! nrepl-p (get config :bind "127.0.0.1"))
-                  (start-ws-server! ws-p)
-                  ; watch this server itself
-                  (when *file*
-                    (watch #js [*file*]
-                           (fn [_event-type filename]
-                             (js/console.log "Reloading" filename)
-                             (load-file filename))))
-                  ; watch served frontend filem
-                  (watch dir
-                         #js {:filter
-                              (fn [f]
-                                (or (.endsWith f ".css")
-                                    (and
-                                      (.endsWith f ".cljs")
-                                      (try
-                                        (fs-sync/accessSync
-                                          f fs-sync/constants.R_OK)
-                                        true
-                                        (catch :default _e)))))
-                              :recursive true}
-                         (fn [event-type filepath]
-                           (let [filepath-rel (path/relative dir filepath)
-                                 filepath-posix (spath->posix filepath-rel)]
-                             (frontend-file-changed event-type filepath-posix))))))
-              ; launch the webserver
-              (let [app (express)]
-                (when-not prod?
-                  (.get app "/*" #(html-injector %1 %2 %3 dir)))
-                (.use app (.static express dir))
-                (when-not prod?
-                  (.use app "/_cljs-josh" #(sse-handler %1 %2)))
-                (.listen app port
-                         (fn []
-                           (js/console.log (str "Serving " dir
-                                                " on port " port ":"))
-                           (doseq [ip (reverse
-                                        (sort-by count
-                                                 (get-local-ip-addresses)))]
-                             (js/console.log (str "- http://" ip ":" port)))))))
-            #(js/console.error %)))))
+          (run-servers options))))
 
 (defn get-args [argv]
   (if *file*
@@ -501,9 +506,6 @@
                            (catch :default _e %))
                      (js->clj argv))
           script-idx (.indexOf argv-vec *file*)]
-      ;(print "script-idx" script-idx)
-      ;(print argv-vec)
-      ;(print *file*)
       (when (>= script-idx 0)
         (not-empty (subvec argv-vec (inc script-idx)))))
     (not-empty (js->clj (.slice argv
