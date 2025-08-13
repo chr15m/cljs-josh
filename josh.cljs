@@ -37,10 +37,10 @@
 (defonce nrepl-sessions (atom {}))
 (defonce nrepl-sockets (atom #{}))
 
-(defn- send-bencode [out response]
+(defn send-bencode [out response]
   (.write out (bencode/encode response)))
 
-(defn- forward-to-browser [socket msg-clj]
+(defn forward-to-browser [socket msg-clj]
   (if-let [ws @nrepl-ws-channel]
     (.send ws (pr-str msg-clj))
     (let [session-id (:session msg-clj)
@@ -57,7 +57,7 @@
       (send-bencode socket (clj->js ns-resp))
       (send-bencode socket (clj->js status-resp)))))
 
-(defn- do-eval [socket msg-clj]
+(defn do-eval [socket msg-clj]
   (let [code (:code msg-clj)
         session-id (:session msg-clj)
         id (:id msg-clj)]
@@ -91,7 +91,7 @@
       :else
       (forward-to-browser socket (assoc msg-clj :op :eval)))))
 
-(defn- handle-nrepl-message [socket msg]
+(defn handle-nrepl-message [socket msg]
   (let [msg-clj (js->clj msg :keywordize-keys true)
         op (keyword (:op msg-clj))]
     ;(print msg-clj)
@@ -164,7 +164,7 @@
 
       (forward-to-browser socket msg-clj))))
 
-(defn- handle-nrepl-client [socket]
+(defn handle-nrepl-client [socket]
   (swap! nrepl-sockets conj socket)
   (.on socket "close" (fn []
                         (js/console.log "nREPL client disconnected.")
@@ -232,7 +232,6 @@
 
 ; *** webserver funtionality *** ;
 
-
 (defn get-local-ip-addresses []
   (let [interfaces (os/networkInterfaces)]
     (for [[_ infos] (js/Object.entries interfaces)
@@ -284,7 +283,7 @@
                             "\n\n"))))
 
 
-(defn- get-free-port []
+(defn get-free-port []
   (js/Promise.
     (fn [res]
       (let [server (net/createServer)]
@@ -294,7 +293,7 @@
                    (.close server #(res port)))))
         (.listen server 0)))))
 
-(defn- read-nrepl-config []
+(defn read-nrepl-config []
   (let [local-config ".nrepl.edn"
         home (os/homedir)
         global-config (when home (path/join home ".nrepl" "nrepl.edn"))
@@ -318,14 +317,14 @@
      (do
        (js/console.log "Josh Scittle re-loader installed")
 
-       (defn- match-tags [tags source-attribute file-path]
+       (defn match-tags [tags source-attribute file-path]
          (.filter (js/Array.from tags)
                   #(let [src (aget % source-attribute)
                          url (when (seq src) (js/URL. src))
                          path (when url (aget url "pathname"))]
                      (= file-path path))))
 
-       (defn- reload-scittle-tags [file-path]
+       (defn reload-scittle-tags [file-path]
          (let [scittle-tags
                (.querySelectorAll
                  js/document
@@ -338,7 +337,7 @@
                  .-core
                  (.eval_script_tags tag)))))
 
-       (defn- reload-css-tags [file-path]
+       (defn reload-css-tags [file-path]
          (let [css-tags
                (.querySelectorAll
                  js/document
@@ -353,7 +352,7 @@
                        first
                        (str "?" (.getTime (js/Date.))))))))
 
-       (defn- setup-sse-connection []
+       (defn setup-sse-connection []
          (let [conn (js/EventSource. "/_cljs-josh")]
            (aset conn "onerror"
                  (fn [ev]
