@@ -10,7 +10,7 @@
     ["path" :as path]
     ["fs/promises" :as fs]
     ["fs" :as fs-sync]
-    ["process" :refer [argv cwd]]
+    ["process" :refer [argv cwd env]]
     [applied-science.js-interop :as j]
     [promesa.core :as p]
     ["node-watch$default" :as watch]
@@ -28,6 +28,8 @@
 (def default-port 8000)
 (def scittle-tag-re
   #"(?i)<script[^>]+src\s*=\s*['\"]([^'\"]*scittle(?:\.min)?\.js)['\"][^>]*>")
+
+(def debug (j/get env :DEBUG))
 
 (defonce connections (atom #{}))
 
@@ -193,6 +195,7 @@
                                  "nREPL stream error, closing connection:" e)
                                (.end socket))
                              :decode-error))]
+                 (when debug (js/console.error "<=" msg))
                  (when (not= msg :decode-error)
                    (let [bytes-consumed (bencode/encodingLength msg)]
                      (handle-nrepl-message socket msg)
@@ -223,6 +226,7 @@
                                    (when (and (not session-id)
                                               (= 1 (count @nrepl-sockets)))
                                      (first @nrepl-sockets)))]
+                    (when debug (js/console.log "=>" (pr-str response)))
                     (if socket
                       (send-bencode socket (clj->js response))
                       (js/console.error
