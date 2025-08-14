@@ -1,6 +1,6 @@
 {
   "name": "cljs-josh",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Scittle cljs live-reloading server.",
   "author": "Chris McCormick <chis@mccormick.cx>",
   "homepage": "https://github.com/chr15m/cljs-josh",
@@ -24,6 +24,7 @@
     "example/main.cljs",
     "example/style.css",
     "josh.cljs",
+    "josh.mjs",
     "package.json"
   ]
 }
