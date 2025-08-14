@@ -526,13 +526,16 @@
 
 (defn get-args [argv]
   (if *file*
-    (let [argv-vec (mapv
+    (let [argv-arr (mapv
                      #(try (fs-sync/realpathSync %)
                            (catch :default _e %))
                      (js->clj argv))
-          script-idx (.indexOf argv-vec *file*)]
-      (when (>= script-idx 0)
-        (not-empty (subvec argv-vec (inc script-idx)))))
+          script-idx (.indexOf argv-arr *file*)
+          script-mjs-idx (.indexOf argv-arr (.replace *file* ".cljs" ".mjs"))]
+      (cond (>= script-idx 0)
+            (not-empty (subvec argv-arr (inc script-idx)))
+            (>= script-mjs-idx 0)
+            (not-empty (subvec argv-arr (inc script-mjs-idx)))))
     (not-empty (js->clj (.slice argv
                                 (if
                                   (or
