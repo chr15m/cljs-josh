@@ -1,11 +1,11 @@
 {
   "name": "cljs-josh",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scittle cljs live-reloading server.",
   "author": "Chris McCormick <chis@mccormick.cx>",
   "homepage": "https://github.com/chr15m/cljs-josh",
   "bin": {
-    "josh": "./josh.cljs"
+    "josh": "./josh.mjs"
   },
   "dependencies": {
     "bencode": "^4.0.0",
