@@ -47,14 +47,16 @@
     (.send ws (pr-str msg-clj))
     (let [session-id (:session msg-clj)
           id (:id msg-clj)
-          err-msg "#error {:message \"No browser connected.\"}"
+          err-msg (str "#error {:message \"No browser connected. "
+                       "Load the page first and try again.\"}")
           ex-resp (cond-> {:ex err-msg :id id}
                     session-id (assoc :session session-id))
           ns-resp (cond-> {:ns "user" :id id}
                     session-id (assoc :session session-id))
           status-resp (cond-> {:status ["done"] :id id :ns ""}
                         session-id (assoc :session session-id))]
-      (js/console.error "nREPL: No browser connected, sending error to client.")
+      (js/console.error
+        "nREPL: No browser connected. Load the page first and try again.")
       (send-bencode socket (clj->js ex-resp))
       (send-bencode socket (clj->js ns-resp))
       (send-bencode socket (clj->js status-resp)))))
