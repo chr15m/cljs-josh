@@ -66,20 +66,6 @@
         session-id (:session msg-clj)
         id (:id msg-clj)]
     (cond
-      (and (not @nrepl-ws-channel) (= code "*ns*"))
-      (do
-        (js/console.log
-          "nREPL: Intercepted *ns* eval with no browser, returning cljs.user.")
-        (send-bencode socket
-                      (clj->js (cond-> {:value "\"cljs.user\"" :id id}
-                                 session-id (assoc :session session-id))))
-        (send-bencode socket
-                      (clj->js (cond-> {:ns "cljs.user" :id id}
-                                 session-id (assoc :session session-id))))
-        (send-bencode socket
-                      (clj->js (cond-> {:status ["done"] :id id}
-                                 session-id (assoc :session session-id)))))
-
       ; shim shadow-style cljs entry
       (and code (= code "(josh/repl)"))
       (doseq [v
