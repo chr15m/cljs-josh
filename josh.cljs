@@ -91,13 +91,13 @@
                                  session-id (assoc :session session-id)))))
 
       :else
-      (forward-to-browser socket (assoc msg-clj :op :eval)))))
+      (forward-to-browser socket msg-clj))))
 
 (defn handle-nrepl-message [socket msg]
   (let [msg-clj (js->clj msg :keywordize-keys true)
-        op (keyword (:op msg-clj))]
+        msg-clj (update msg-clj :op keyword)]
     ;(print msg-clj)
-    (case op
+    (case (:op msg-clj)
       :clone (let [session-id (str (random-uuid))
                    response (clj->js (cond-> {:new-session session-id
                                               :status ["done"]
