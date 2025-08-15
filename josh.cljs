@@ -80,6 +80,35 @@
                       (clj->js (cond-> {:status ["done"] :id id}
                                  session-id (assoc :session session-id)))))
 
+      ; shim shadow-style cljs entry
+      (and code (= code "(josh/repl)"))
+      (doseq [v
+              [{:out "Josh cljs nREPL. To quit, type: :cljs/quit\n"}
+               #_ {:value '[:selected :browser-repl]}
+               {:ns "cljs.user"}
+               {:status ["done"]}]]
+        (send-bencode socket
+                      (clj->js
+                        (merge
+                          {:id id
+                           :session session-id}
+                          v))))
+
+      ; shim shadow-style cljs exit
+      (and code (= code ":cljs/quit"))
+      (doseq [v
+              [{:err "Exited CLJS Session. Rejoin with (josh/repl)."}
+               {:ns "cljs.user"
+                :printed-value 1
+                :value ":cljs/quit"}
+               {:status ["done"]}]]
+        (send-bencode socket
+                      (clj->js
+                        (merge
+                          {:id id
+                           :session session-id}
+                          v))))
+
       (and code (or (str/includes? code "clojure.main/repl-requires")
                     (str/includes? code "System/getProperty")))
       (do
