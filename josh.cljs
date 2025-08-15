@@ -92,6 +92,23 @@
                       (clj->js (cond-> {:status ["done"] :id id}
                                  session-id (assoc :session session-id)))))
 
+      ; shim vim-fireplace namespace switching
+      (and code
+           (re-matches #"^\(ns cljs\.user \(:require [^)]+\)\)$" code))
+      (let [ns-match (re-find #":require\s+([^)\s]+)" code)
+            target-ns (when ns-match (second ns-match))]
+        (if target-ns
+          ; Send two commands: first the require, then switch to the namespace
+          (do
+            ; First, forward the require
+            (forward-to-browser socket msg-clj)
+            ; Then immediately switch to the target namespace
+            (forward-to-browser socket
+                              (assoc msg-clj
+                                     :code (str "(in-ns '" target-ns ")")
+                                     :ns target-ns)))
+          (forward-to-browser socket msg-clj)))
+
       :else
       (forward-to-browser socket msg-clj))))
 
