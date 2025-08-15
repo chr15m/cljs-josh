@@ -134,7 +134,7 @@
                                              :lookup
                                              :macroexpand])
                                   (repeat {}))
-                           :aux {}
+                           :aux {:cwd (cwd)}
                            :status ["done"]
                            :id (:id msg-clj)}
                           (:session msg-clj)
