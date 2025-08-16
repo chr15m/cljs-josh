@@ -1,6 +1,6 @@
 [Scittle](https://github.com/babashka/scittle/) cljs live-reloading server.
 
-[Quickstart](#quickstart) | [Example project](#example-project) | [Features](#features) | [nREPL](#tips)
+[Quickstart](#quickstart) | [Example project](#example-project) | [Features](#features) | [nREPL](#nrepl)
 
 [![A YouTube video about `cljs-josh`](https://i3.ytimg.com/vi/4tbjE0_W-58/mqdefault.jpg)](https://youtu.be/4tbjE0_W-58).
 
