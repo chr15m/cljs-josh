@@ -1,13 +1,16 @@
 [Scittle](https://github.com/babashka/scittle/) cljs live-reloading server.
 
-[A YouTube video about `cljs-josh`](https://youtu.be/4tbjE0_W-58).
+[Quickstart](#quickstart) | [Example project](#example-project) | [Features](#features) | [nREPL](#tips)
 
-[Example project](#example-project) | [Features](#features) | [Tips (+ nREPL)](#tips)
+[![A YouTube video about `cljs-josh`](https://i3.ytimg.com/vi/4tbjE0_W-58/mqdefault.jpg)](https://youtu.be/4tbjE0_W-58).
+
+## Quickstart
 
 Start the `josh` watch server:
 
 ```shell
 npm install cljs-josh
+npx josh --init # optionally init with a basic project
 npx josh
 ```
 
@@ -15,9 +18,11 @@ Then visit your [Scittle-enabled index.html](./example/index.html) at <http://lo
 
 When you save your .cljs files they will be hot-loaded into the browser running Scittle.
 
-You can also install the `josh` command globally: `npm i -g cljs-josh`.
+You can also install the `josh` command globally: `npm i -g cljs-josh` and then just call `josh`.
 
-Bootstrap a basic Scittle project with `josh --init`.
+You can bootstrap a basic Scittle project with `josh --init`.
+
+You can [use the nREPL](#nREPL) to evaluate forms.
 
 ## Example project
 
@@ -41,25 +46,24 @@ I wanted a Scittle dev experience with these features:
 - Installable with `npm install`.
 - Pure JavaScript, no Java/binary dependency.
 - Minimal library deps.
+- nREPL support.
 
 Josh is built on [`nbb`](https://github.com/babashka/nbb/).
 
-## Tips
-
-- Install `josh` globally with `npm i -g cljs-josh` and then you can just use `josh` to run it.
-- Use `josh --init` to download and install the example template into the current folder.
-
-### nREPL support
+## nREPL
 
 Josh runs an nREPL proxy which sends all commands to Scittle over a websocket.
 It automatically injects the `scittle.nrepl.js` script tags into the HTML at runtime.
 
 The following editor specific instructions assume you have already:
 
-- run `josh`.
+- Set up a basic Scittle project (`josh --init`).
+- run `josh` to start the server.
   `nREPL server started on port 34581 on host 127.0.0.1 - nrepl://127.0.0.1:34581`
-- Load `http://localhost:8000` in your browser.
+- Loaded `http://localhost:8000` in your browser.
 - Opened main.cljs in your editor.
+
+Editor-specific instructions are below.
 
 #### VS Code
 
