@@ -547,13 +547,14 @@
 
 (defn main
   [& args]
-  (let [{:keys [errors options summary]} (cli/parse-opts args cli-options)]
+  (let [{:keys [errors options summary arguments]} (cli/parse-opts args cli-options)]
     (cond errors
           (doseq [e errors]
             (print e))
           (:help options)
           (print-usage summary)
-          (:init options)
+          (or (:init options)
+              (= "init" (first arguments)))
           (install-examples)
           :else
           (run-servers options))))
