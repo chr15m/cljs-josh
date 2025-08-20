@@ -488,15 +488,30 @@
       (p/then #(.json %))
       (p/then #(js->clj % :keywordize-keys true))))
 
-(defn list-template-repos []
-  (js/console.log "Fetching repositories with the 'scittle-template' tag.\n")
+(defn list-template-repos [search-term]
+  (js/console.log
+    (if (str/blank? search-term)
+      "Fetching repositories with the 'scittle-template' tag.\n"
+      (str "Fetching repositories with the 'scittle-template' tag matching '" search-term "'.\n")))
   (p/let [response (fetch-github-api "https://api.github.com/search/repositories?q=topic:scittle-template&sort=stars&order=desc&per_page=100")
-          repos (:items response)]
+          all-repos (:items response)
+          repos (if (str/blank? search-term)
+                  all-repos
+                  (let [search-lower (str/lower-case search-term)]
+                    (filter (fn [repo]
+                              (let [name-lower (str/lower-case (:full_name repo))
+                                    desc-lower (str/lower-case (or (:description repo) ""))]
+                                (or (str/includes? name-lower search-lower)
+                                    (str/includes? desc-lower search-lower))))
+                            all-repos)))]
     (if (empty? repos)
       (js/console.log "No repositories found with the 'scittle-template' tag.")
       (do
         (js/console.log (str "Found " (count repos) " repositories:"))
-        (doseq [repo repos]
+        (doseq [repo (sort-by (fn [repo]
+                                [(not= (:full_name repo) "chr15m/scittle-template-basic")
+                                 (- (js/Date.parse (:created_at repo)))])
+                              repos)]
           (js/console.log (str "\n"
                                "- " (:full_name repo) "\n"
                                "  " (:description repo))))))))
@@ -599,7 +614,8 @@
               (= "init" (first arguments)))
           (p/finally (install-examples) #(j/call js/process :exit 0))
           (= "templates" (first arguments))
-          (p/finally (list-template-repos) #(j/call js/process :exit 0))
+          (let [search-term (str/join " " (rest arguments))]
+            (p/finally (list-template-repos search-term) #(j/call js/process :exit 0)))
           (= "install" (first arguments))
           (let [repo-full-name (second arguments)]
             (if-not repo-full-name
