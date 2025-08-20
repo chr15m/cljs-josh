@@ -483,6 +483,48 @@
            (p/all))
       (js/console.log "Now run josh to serve this folder."))))
 
+(defn fetch-github-api [url]
+  (-> (js/fetch url #js {:headers #js {"Accept" "application/vnd.github.v3+json"}})
+      (p/then #(.json %))
+      (p/then #(js->clj % :keywordize-keys true))))
+
+(defn list-template-repos []
+  (js/console.log "Fetching repositories with the 'scittle-template' tag.\n")
+  (p/let [response (fetch-github-api "https://api.github.com/search/repositories?q=topic:scittle-template&sort=stars&order=desc&per_page=100")
+          repos (:items response)]
+    (if (empty? repos)
+      (js/console.log "No repositories found with the 'scittle-template' tag.")
+      (do
+        (js/console.log (str "Found " (count repos) " repositories:"))
+        (doseq [repo repos]
+          (js/console.log (str "\n"
+                               "- " (:full_name repo) "\n"
+                               "  " (:description repo))))))))
+
+(defn download-file [url path]
+  (p/let [response (js/fetch url)
+          content (.text response)]
+    (fs/writeFile path content)))
+
+(defn download-repo-files [owner repo]
+  (js/console.log (str "Downloading files from " owner "/" repo "..."))
+  (p/let [contents (fetch-github-api (str "https://api.github.com/repos/" owner "/" repo "/contents/"))
+          files (filter #(= (:type %) "file") contents)]
+    (if (empty? files)
+      (js/console.log "No files found in the repository.")
+      (p/do!
+        (js/console.log (str "Found " (count files) " files. Downloading..."))
+        (p/all
+          (for [file files]
+            (p/catch
+              (p/do!
+                (fs/access (:name file))
+                (js/console.log (:name file) "exists already, skipping."))
+              (fn [_err]
+                (js/console.log "Downloading" (:name file))
+                (download-file (:download_url file) (:name file))))))
+        (js/console.log "Download complete. Now run josh to serve this folder.")))))
+
 (defn spath->posix
   "Converts SPATH to a POSIX-style path with '/' separators and returns it."
   [spath]
@@ -555,7 +597,21 @@
           (print-usage summary)
           (or (:init options)
               (= "init" (first arguments)))
-          (install-examples)
+          (p/finally (install-examples) #(j/call js/process :exit 0))
+          (= "templates" (first arguments))
+          (p/finally (list-template-repos) #(j/call js/process :exit 0))
+          (= "install" (first arguments))
+          (let [repo-full-name (second arguments)]
+            (if-not repo-full-name
+              (do
+                (js/console.error "Please provide a repository name, e.g. owner/repo")
+                (j/call js/process :exit 1))
+              (let [[owner repo] (str/split repo-full-name #"/")]
+                (if (and owner repo)
+                  (p/finally (download-repo-files owner repo) #(j/call js/process :exit 0))
+                  (do
+                    (js/console.error "Invalid repository name format. Expected owner/repo")
+                    (j/call js/process :exit 1))))))
           :else
           (run-servers options))))
 
