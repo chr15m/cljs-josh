@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { addClassPath, loadFile } from 'nbb';
-import { fileURLToPath } from 'url';
-import { dirname, basename, resolve } from 'path';
+import { fileURLToPath } from 'node:url';
+import { dirname, basename, resolve } from 'node:path';
 
 const __dirname = fileURLToPath(dirname(import.meta.url));
 const __filename = basename(import.meta.url);
