@@ -2,7 +2,7 @@
 
 [Quickstart](#quickstart) | [Example project](#example-project) | [Features](#features) | [nREPL](#nrepl)
 
-[![A YouTube video about `cljs-josh`](https://i3.ytimg.com/vi/4tbjE0_W-58/mqdefault.jpg)](https://youtu.be/4tbjE0_W-58).
+[![A YouTube video about `cljs-josh`](https://i3.ytimg.com/vi/b1C3rD-ZUaA/mqdefault.jpg)](https://youtu.be/b1C3rD-ZUaA).
 
 ## Quickstart
 
