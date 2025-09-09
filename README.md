@@ -84,7 +84,7 @@ Now you can evaluate forms.
 
 If that doesn't get you up and running you may need to use `sesman-link-with-buffer` and select the existing entry.
 
-Note: `cider-inspect` work.
+Note: `cider-inspect` doesn't work.
 
 If you have `cider-default-cljs-repl` set in your Emacs config it may also help to comment that out:
 
