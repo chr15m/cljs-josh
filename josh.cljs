@@ -462,6 +462,20 @@
        (fn [error]
          (js/console.error error))))
 
+(defonce handle-exit
+  (let [cleanup-fn
+        #(let [port-file-path (path/join (cwd) ".nrepl-port")]
+           (when (fs-sync/existsSync port-file-path)
+             (js/console.log "Removing .nrepl-port file.")
+             (fs-sync/unlinkSync port-file-path)))]
+    (.on js/process "exit" cleanup-fn)
+    (.on js/process "SIGINT" (fn []
+                               (js/console.log "\nCaught SIGINT, exiting.")
+                               (.exit js/process 0)))
+    (.on js/process "SIGTERM" (fn []
+                                (js/console.log "Caught SIGTERM, exiting.")
+                                (.exit js/process 0)))))
+
 (defn print-usage [summary]
   (print "Program options:")
   (print summary))
