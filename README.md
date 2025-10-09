@@ -97,3 +97,11 @@ If you have `cider-default-cljs-repl` set in your Emacs config it may also help 
 - Run `:CljEval (josh/repl)` to tell vim-fireplace it's in a ClojureScript repl.
 
 Now you can evaluate forms with `cpp` and `cpip` etc.
+
+#### deno
+
+`cljs-josh` can be run with `deno`. Either use `deno cljs-josh.mjs` or `deno run sample`. See `deno.json` for invocation details.
+
+#### bun
+
+`cljs-josh` also works with `bun`. `bun x nbb cljs-josh`. Running the server with the mjs wrapper (`cljs-josh.mjs`) does not work with bun.

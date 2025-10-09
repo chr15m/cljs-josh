@@ -1,0 +1,9 @@
+{
+    "nodeModulesDir" : "auto",
+    "tasks": {
+       "sample": "deno run --unstable-detect-cjs --unstable-sloppy-imports -A jsr:@babashka/nbb josh.cljs --dir example/"
+    },
+    "imports": {
+        "node-watch": "npm:node-watch@^0.7.4"
+    }
+}

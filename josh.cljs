@@ -15,7 +15,7 @@
     [promesa.core :as p]
     ["node-watch$default" :as watch]
     ["express$default" :as express]
-    ["bencode$default" :as bencode]
+    ["bencodec$default" :as bencode]
     ["ws" :refer [WebSocketServer]]
     [nbb.core :refer [load-file *file*]]))
 
