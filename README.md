@@ -2,7 +2,7 @@
 
 [Quickstart](#quickstart) | [Example project](#example-project) | [Features](#features) | [nREPL](#nrepl)
 
-[![A YouTube video about `cljs-josh`](https://i3.ytimg.com/vi/4tbjE0_W-58/mqdefault.jpg)](https://youtu.be/4tbjE0_W-58).
+[![A YouTube video about `cljs-josh`](https://i3.ytimg.com/vi/b1C3rD-ZUaA/mqdefault.jpg)](https://youtu.be/b1C3rD-ZUaA).
 
 ## Quickstart
 
@@ -84,7 +84,7 @@ Now you can evaluate forms.
 
 If that doesn't get you up and running you may need to use `sesman-link-with-buffer` and select the existing entry.
 
-Note: `cider-inspect` work.
+Note: `cider-inspect` doesn't work.
 
 If you have `cider-default-cljs-repl` set in your Emacs config it may also help to comment that out:
 
