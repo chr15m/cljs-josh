@@ -351,96 +351,109 @@
           nil)))))
 
 (def loader
-  '(defonce _josh-reloader
-     (do
-       (js/console.log "Josh Scittle re-loader installed")
+  '(do
+     (js/console.log "Josh Scittle re-loader installed")
 
-       (defn match-tags [tags source-attribute file-path]
-         (.filter (js/Array.from tags)
-                  #(let [src (aget % source-attribute)
-                         url (when (seq src) (js/URL. src))
-                         path (when url (aget url "pathname"))]
-                     (= file-path path))))
+     (defn normalize-path [s]
+       (-> s (or "") (.toString)
+           (.replace (js/RegExp. "^https?://[^/]+") "")
+           (.replace (js/RegExp. "\\?.*$") "")))
 
-       (defn reload-scittle-tags [file-path]
-         (let [scittle-tags
-               (.querySelectorAll
-                 js/document
-                 "script[type='application/x-scittle']")
-               matching-scittle-tags
-               (match-tags scittle-tags "src" file-path)]
-           (doseq [tag matching-scittle-tags]
-             (js/console.log "Reloading" (aget tag "src"))
-             (-> js/scittle
-                 .-core
-                 (.eval_script_tags tag)))))
+     (defn dig [o & ks]
+       (reduce (fn [acc k] (when acc (aget acc k))) o ks))
 
-       (defn reload-css-tags [file-path]
-         (let [css-tags
-               (.querySelectorAll
-                 js/document
-                 "link[rel='stylesheet']")
-               matching-css-tags
-               (match-tags css-tags "href" file-path)]
-           (doseq [tag matching-css-tags]
-             (js/console.log "Reloading" (aget tag "href"))
-             (aset tag "href"
-                   (-> (aget tag "href")
-                       (.split "?")
-                       first
-                       (str "?" (.getTime (js/Date.))))))))
+     (defn eval-all-scittle! []
+       (try
+         (-> js/scittle .-core (.eval_script_tags))
+         (catch :default e
+           (js/console.warn "No-arg eval failed, retry with explicit NodeList:" e)
+           (let [tags (.querySelectorAll js/document "script[type='application/x-scittle']")]
+             (-> js/scittle .-core (.eval_script_tags tags))))))
 
-       (defn setup-sse-connection []
-         (let [conn (js/EventSource. "/_cljs-josh")]
-           (aset conn "onerror"
-                 (fn [ev]
-                   (js/console.error "SSE connection closed.")
-                   (when (= (aget conn "readyState")
-                            (aget js/EventSource "CLOSED"))
-                     (js/console.error "Creating new SSE connection.")
-                     (js/setTimeout
-                       #(setup-sse-connection)
-                       2000))))
-           (aset conn "onmessage"
-                 (fn [data]
-                   (let [packet (-> data
-                                    (aget "data")
-                                    js/JSON.parse
-                                    (js->clj :keywordize-keys true))]
-                     ; (js/console.log "packet" (pr-str packet))
-                     (when-let [file-path (:reload packet)]
-                       (cond (.endsWith file-path ".cljs")
-                             (reload-scittle-tags file-path)
-                             (.endsWith file-path ".css")
-                             (reload-css-tags file-path))))))))
+     (defn reload-all-scittle! []
+       (js/console.log "Reloading all Scittle script tags")
+       (eval-all-scittle!)
+       (let [candidates [(dig js "cljs" "user" "start!")
+                         (dig js "app" "core" "start!")
+                         (dig js "stilig" "core" "start!")
+                         (dig js "user" "core" "start!")]
+             reg (.-SCITTLE_STARTERS js/window)]))
 
-       (setup-sse-connection))))
+     (defn reload-css-tags! [file-path]
+       (let [nodes (.querySelectorAll js/document "link[rel='stylesheet']")
+             arr   (js/Array.from nodes)]
+         (.forEach arr
+                   (fn [tag]
+                     (let [href (aget tag "href")]
+                       (when (and href
+                                  (= (normalize-path href)
+                                     (normalize-path file-path)))
+                         (js/console.log "Reloading CSS" href)
+                         (aset tag "href"
+                               (-> href (.split "?") first
+                                   (str "?" (.getTime (js/Date.)))))))))))
+
+     (defn setup-sse-connection []
+       (let [conn (js/EventSource. "/_cljs-josh")]
+         (aset conn "onerror"
+               (fn [_ev]
+                 (js/console.error "SSE connection closed.")
+                 (when (= (aget conn "readyState")
+                          (aget js/EventSource "CLOSED"))
+                   (js/console.error "Creating new SSE connection.")
+                   (js/setTimeout (fn [] (setup-sse-connection)) 2000))))
+         (aset conn "onmessage"
+               (fn [data]
+                 (let [packet (-> data (aget "data") js/JSON.parse
+                                  (js->clj :keywordize-keys true))
+                       file-path (:reload packet)]
+                   (when file-path
+                     (cond
+                       (.endsWith file-path ".css")  (reload-css-tags! file-path)
+                       (.endsWith file-path ".cljs") (reload-all-scittle!)
+                       :else
+                       (when (or (.endsWith file-path ".htm")
+                                 (.endsWith file-path ".html"))
+                         (js/location.reload))))))))
+       nil)
+
+     (when-not (.-SCITTLE_STARTERS js/window)
+       (set! (.-SCITTLE_STARTERS js/window) (js/Array.))
+       (set! (.-SCITTLE_REGISTER js/window)
+             (fn [f]
+               (when (fn? f)
+                 (.push (.-SCITTLE_STARTERS js/window) f)))))
+
+     (setup-sse-connection)))
 
 (defn html-injector [req res done dir ws-port]
-  ; intercept static requests to html and inject the loader script
   (p/let [html (find-html req dir)]
-    (if html
-      (let [scittle-tag-match
-            (re-find scittle-tag-re html)
+    (if (not html)
+      (done)
+      (let [scittle-tag-match (re-find scittle-tag-re html)
             scittle-js-url (when scittle-tag-match (second scittle-tag-match))
             nrepl-scripts
             (when scittle-js-url
               (str
-                "<script>var SCITTLE_NREPL_WEBSOCKET_PORT = "
-                ws-port ";</script>"
-                "<script src=\"" (str/replace scittle-js-url "scittle."
-                                              "scittle.nrepl.")
-                "\" type=\"application/javascript\"></script>"))
+               "<script>var SCITTLE_NREPL_WEBSOCKET_PORT = "
+               ws-port ";</script>"
+               "<script src=\"" (str/replace scittle-js-url "scittle."
+                                             "scittle.nrepl.")
+               "\" type=\"application/javascript\"></script>"))
             loader-script (str "<script type='application/x-scittle'>"
                                (pr-str loader) "</script>")
-            injected-html
-            (.replace html #"(?i)</body>"
-                      (str nrepl-scripts loader-script "</body>"))]
-        (.send res injected-html))
-      (done))))
+            inject (fn [s]
+                     (or
+                      (when (re-find #"(?i)</body>" s)
+                        (.replace s #"(?i)</body>"
+                                  (str nrepl-scripts loader-script "</body>")))
+                      (when (re-find #"(?i)</html>" s)
+                        (.replace s #"(?i)</html>"
+                                  (str nrepl-scripts loader-script "</html>")))
+                      (str s nrepl-scripts loader-script)))]
+        (.send res (inject html))))))
 
-(defn frontend-file-changed
-  [_event-type filename]
+(defn frontend-file-changed [_event-type filename]
   (js/console.log "Frontend reloading:" filename)
   (send-to-all {:reload (str "/" filename)}))
 
@@ -486,16 +499,16 @@
         files ["index.html" "main.cljs" "style.css"]]
     (js/console.log "Copying example files here.")
     (p/do!
-      (->> files
-           (map #(p/catch
-                   (p/do!
-                     (fs/access %)
-                     (js/console.log % "exists already, skipping."))
-                   (fn [_err]
-                     (js/console.log "Copying" %)
-                     (fs/cp (path/join example-dir %) %))))
-           (p/all))
-      (js/console.log "Now run josh to serve this folder."))))
+     (->> files
+          (map #(p/catch
+                 (p/do!
+                  (fs/access %)
+                  (js/console.log % "exists already, skipping."))
+                 (fn [_err]
+                   (js/console.log "Copying" %)
+                   (fs/cp (path/join example-dir %) %))))
+          (p/all))
+     (js/console.log "Now run josh to serve this folder."))))
 
 (defn spath->posix
   "Converts SPATH to a POSIX-style path with '/' separators and returns it."
@@ -516,13 +529,13 @@
          #js {:filter
               (fn [f]
                 (or (.endsWith f ".css")
-                    (and
-                      (.endsWith f ".cljs")
-                      (try
-                        (fs-sync/accessSync
-                          f fs-sync/constants.R_OK)
-                        true
-                        (catch :default _e)))))
+                    (.endsWith f ".htm")
+                    (.endsWith f ".html")
+                    (and (.endsWith f ".cljs")
+                         (try
+                           (fs-sync/accessSync f fs-sync/constants.R_OK)
+                           true
+                           (catch :default _e false)))))
               :recursive true}
          (fn [event-type filepath]
            (let [filepath-rel (path/relative dir filepath)
@@ -530,41 +543,39 @@
              (frontend-file-changed event-type filepath-posix)))))
 
 (defn start-webserver [app dir port]
-  ; launch the webserver
-  (.use app (.static express dir))
   (.listen app port
            (fn []
-             (js/console.log (str "Serving " dir
-                                  " on port " port ":"))
+             (js/console.log (str "Serving " dir " on port " port ":"))
              (doseq [ip (reverse
-                          (sort-by count
-                                   (get-local-ip-addresses)))]
+                         (sort-by count
+                                  (get-local-ip-addresses)))]
                (js/console.log (str "- http://" ip ":" port))))))
 
 (defn run-servers [options]
   (p/catch
-    (p/let [port (:port options)
-            dir (:dir options)
-            prod? (:prod options)
-            app (express)]
-      (when-not prod?
-        (p/let [config (read-nrepl-config)
-                nrepl-p (or (get config :port) (get-free-port))
-                ws-p (or (get config :ws-port) (get-free-port))]
-          (start-nrepl-server! nrepl-p (get config :bind "127.0.0.1"))
-          (start-ws-server! ws-p)
-          (start-watchers dir)
-          (.get app "/*" #(html-injector %1 %2 %3 dir ws-p))
-          (.use app "/_cljs-josh" #(sse-handler %1 %2))))
-      (start-webserver app dir port))
-    #(js/console.error %)))
+   (p/let [port (:port options)
+           dir (:dir options)
+           prod? (:prod options)
+           app (express)]
+     (if prod?
+       (do
+         (.use app (.static express dir)))
+       (p/let [config (read-nrepl-config)
+               nrepl-p (or (get config :port) (get-free-port))
+               ws-p (or (get config :ws-port) (get-free-port))]
+         (start-nrepl-server! nrepl-p (get config :bind "127.0.0.1"))
+         (start-ws-server! ws-p)
+         (start-watchers dir)
+         (.get app "/*" #(html-injector %1 %2 %3 dir ws-p))
+         (.use app (.static express dir))
+         (.use app "/_cljs-josh" #(sse-handler %1 %2))))
+     (start-webserver app dir port))
+   #(js/console.error %)))
 
-(defn main
-  [& args]
+(defn main [& args]
   (let [{:keys [errors options summary]} (cli/parse-opts args cli-options)]
     (cond errors
-          (doseq [e errors]
-            (print e))
+          (doseq [e errors] (print e))
           (:help options)
           (print-usage summary)
           (:init options)
@@ -575,9 +586,9 @@
 (defn get-args [argv]
   (if *file*
     (let [argv-arr (mapv
-                     #(try (fs-sync/realpathSync %)
-                           (catch :default _e %))
-                     (js->clj argv))
+                    #(try (fs-sync/realpathSync %)
+                          (catch :default _e %))
+                    (js->clj argv))
           script-idx (.indexOf argv-arr *file*)
           script-mjs-idx (.indexOf argv-arr (.replace *file* ".cljs" ".mjs"))]
       (cond (>= script-idx 0)
@@ -586,13 +597,13 @@
             (not-empty (subvec argv-arr (inc script-mjs-idx)))))
     (not-empty (js->clj (.slice argv
                                 (if
-                                  (or
-                                    (.endsWith
-                                      (or (aget argv 1) "")
-                                      "node_modules/nbb/cli.js")
-                                    (.endsWith
-                                      (or (aget argv 1) "")
-                                      "/bin/nbb"))
+                                 (or
+                                  (.endsWith
+                                   (or (aget argv 1) "")
+                                   "node_modules/nbb/cli.js")
+                                  (.EndsWith
+                                   (or (aget argv 1) "")
+                                   "/bin/nbb"))
                                   3 2))))))
 
 (defonce started
