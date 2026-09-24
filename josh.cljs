@@ -26,6 +26,7 @@
 ; test </BODY> and </body>
 
 (def default-port 8000)
+(def console-log-file "./.josh.console.log")
 (def scittle-tag-re
   #"(?i)<script[^>]+src\s*=\s*['\"]([^'\"]*scittle(?:\.min)?\.js)['\"][^>]*>")
 
@@ -350,6 +351,64 @@
           (js/console.error "Error reading" config-path e)
           nil)))))
 
+(def console-logger-script
+  (str
+    "<script>\n"
+    "(function() {\n"
+    "  var orig = {log: console.log, info: console.info, warn: console.warn,\n"
+    "              error: console.error, debug: console.debug};\n"
+    "  function fmt(a) {\n"
+    "    if (a instanceof Error) return a.stack || a.message || String(a);\n"
+    "    if (typeof a === 'object' && a !== null) {\n"
+    "      try { return JSON.stringify(a); } catch(e) { return String(a); }\n"
+    "    }\n"
+    "    return String(a);\n"
+    "  }\n"
+    "  function send(lvl, txt, stk) {\n"
+    "    var full = txt;\n"
+    "    if (stk && (!txt || txt.indexOf(stk) === -1)) {\n"
+    "      full = txt ? txt + '\\n' + stk : stk;\n"
+    "    }\n"
+    "    try {\n"
+    "      fetch('/_cljs-josh/log', {\n"
+    "        method: 'POST',\n"
+    "        headers: {'Content-Type': 'application/json'},\n"
+    "        body: JSON.stringify({level: lvl, text: full})\n"
+    "      }).catch(function() {});\n"
+    "    } catch(e) {}\n"
+    "  }\n"
+    "  ['log', 'info', 'warn', 'error', 'debug'].forEach(function(lvl) {\n"
+    "    console[lvl] = function() {\n"
+    "      var args = Array.prototype.slice.call(arguments);\n"
+    "      orig[lvl].apply(console, args);\n"
+    "      var txt = args.map(fmt).join(' ');\n"
+    "      var stk = null;\n"
+    "      if (lvl === 'error' || lvl === 'warn') {\n"
+    "        var err = args.find(function(a) { return a instanceof Error; });\n"
+    "        if (err) {\n"
+    "          stk = err.stack;\n"
+    "        } else {\n"
+    "          try { throw new Error(); } catch(e) {\n"
+    "            stk = e.stack ? e.stack.split('\\n').slice(2).join('\\n') : null;\n"
+    "          }\n"
+    "        }\n"
+    "      }\n"
+    "      send(lvl.toUpperCase(), txt, stk);\n"
+    "    };\n"
+    "  });\n"
+    "  window.addEventListener('error', function(e) {\n"
+    "    var loc = e.filename + ':' + e.lineno + ':' + e.colno;\n"
+    "    send('ERROR', e.message || 'Uncaught error',\n"
+    "         e.error ? e.error.stack : loc);\n"
+    "  });\n"
+    "  window.addEventListener('unhandledrejection', function(e) {\n"
+    "    var r = e.reason;\n"
+    "    send('ERROR', 'Unhandled rejection: ' + fmt(r),\n"
+    "         r && r.stack ? r.stack : null);\n"
+    "  });\n"
+    "})();\n"
+    "</script>"))
+
 (def loader
   '(defonce _josh-reloader
      (do
@@ -416,27 +475,42 @@
 
        (setup-sse-connection))))
 
-(defn html-injector [req res done dir ws-port]
+(defn html-injector [req res done dir ws-port log-console?]
   ; intercept static requests to html and inject the loader script
   (p/let [html (find-html req dir)]
     (if html
-      (let [scittle-tag-match
-            (re-find scittle-tag-re html)
-            scittle-js-url (when scittle-tag-match (second scittle-tag-match))
-            nrepl-scripts
-            (when scittle-js-url
-              (str
-                "<script>var SCITTLE_NREPL_WEBSOCKET_PORT = "
-                ws-port ";</script>"
-                "<script src=\"" (str/replace scittle-js-url "scittle."
-                                              "scittle.nrepl.")
-                "\" type=\"application/javascript\"></script>"))
-            loader-script (str "<script type='application/x-scittle'>"
-                               (pr-str loader) "</script>")
-            injected-html
-            (.replace html #"(?i)</body>"
-                      (str nrepl-scripts loader-script "</body>"))]
-        (.send res injected-html))
+      (do
+        (when log-console?
+          (try
+            (fs-sync/writeFileSync console-log-file "")
+            (catch :default e
+              (js/console.error "Error truncating log file:" e))))
+        (let [has-head? (re-find #"(?i)<head[^>]*>" html)
+              html (if (and log-console? has-head?)
+                     (str/replace-first
+                       html #"(?i)(<head[^>]*>)"
+                       (str "$1" console-logger-script))
+                     html)
+              scittle-tag-match
+              (re-find scittle-tag-re html)
+              scittle-js-url (when scittle-tag-match (second scittle-tag-match))
+              nrepl-scripts
+              (when scittle-js-url
+                (str
+                  "<script>var SCITTLE_NREPL_WEBSOCKET_PORT = "
+                  ws-port ";</script>"
+                  "<script src=\"" (str/replace scittle-js-url "scittle."
+                                                "scittle.nrepl.")
+                  "\" type=\"application/javascript\"></script>"))
+              logger-fallback (when (and log-console? (not has-head?))
+                                console-logger-script)
+              loader-script (str logger-fallback
+                                 "<script type='application/x-scittle'>"
+                                 (pr-str loader) "</script>")
+              injected-html
+              (.replace html #"(?i)</body>"
+                        (str nrepl-scripts loader-script "</body>"))]
+          (.send res injected-html)))
       (done))))
 
 (defn frontend-file-changed
@@ -455,6 +529,7 @@
    ["-i" "--init" (str "Set up a basic Scittle project. Copies an html,"
                        "cljs, and css file into the current folder.")]
    ["-h" "--help"]
+   [nil "--log-console" "Log browser console output to ./.josh.console.log"]
    [nil "--prod" "Disable live-reloading and nREPL for production."]])
 
 (defonce handle-error
@@ -546,6 +621,7 @@
     (p/let [port (:port options)
             dir (:dir options)
             prod? (:prod options)
+            log-console? (:log-console options)
             app (express)]
       (when-not prod?
         (p/let [config (read-nrepl-config)
@@ -554,7 +630,22 @@
           (start-nrepl-server! nrepl-p (get config :bind "127.0.0.1"))
           (start-ws-server! ws-p)
           (start-watchers dir)
-          (.get app "/*" #(html-injector %1 %2 %3 dir ws-p))
+          (when log-console?
+            (.post app "/_cljs-josh/log"
+                   (.json express)
+                   (fn [req res]
+                     (let [body (j/get req :body)
+                           level (j/get body :level "LOG")
+                           text (j/get body :text)]
+                       (when text
+                         (try
+                           (fs-sync/appendFileSync
+                             console-log-file
+                             (str "[" level "] " text "\n"))
+                           (catch :default e
+                             (js/console.error "Error writing log file:" e))))
+                       (.sendStatus res 200)))))
+          (.get app "/*" #(html-injector %1 %2 %3 dir ws-p log-console?))
           (.use app "/_cljs-josh" #(sse-handler %1 %2))))
       (start-webserver app dir port))
     #(js/console.error %)))
