@@ -1,6 +1,6 @@
 [Scittle](https://github.com/babashka/scittle/) cljs live-reloading server.
 
-[Quickstart](#quickstart) | [Example project](#example-project) | [Features](#features) | [nREPL](#nrepl)
+[Quickstart](#quickstart) | [Example project](#example-project) | [Features](#features) | [CLI flags](#cli-flags) | [nREPL](#nrepl)
 
 [![A YouTube video about `cljs-josh`](https://i3.ytimg.com/vi/b1C3rD-ZUaA/mqdefault.jpg)](https://youtu.be/b1C3rD-ZUaA).
 
@@ -50,6 +50,17 @@ I wanted a Scittle dev experience with these features:
 
 Josh is built on [`nbb`](https://github.com/babashka/nbb/).
 
+## CLI flags
+
+- `-d, --dir DIR`: Path to directory to serve (default: `./`).
+- `-p, --port PORT`: Webserver port number (default: `8000`).
+- `-e, --eval CODE`: Evaluate ClojureScript expression on running server.
+- `--nrepl CODE`: Alias for `--eval`.
+- `-i, --init`: Copy basic project files into current directory.
+- `--log-console`: Stream browser console output to `./.josh.console.log`.
+- `--prod`: Disable live-reloading and nREPL for production.
+- `-h, --help`: Print command line options summary.
+
 ## nREPL
 
 Josh runs an nREPL proxy which sends all commands to Scittle over a websocket.
@@ -64,6 +75,17 @@ The following editor specific instructions assume you have already:
 - Opened main.cljs in your editor.
 
 Editor-specific instructions are below.
+
+#### CLI
+
+You can evaluate expressions against the running browser session directly from
+the command line:
+
+```shell
+josh -e '(js/alert "Hello from CLI")'
+# or using --nrepl
+josh --nrepl '(+ 1 2 3)'
+```
 
 #### VS Code
 
