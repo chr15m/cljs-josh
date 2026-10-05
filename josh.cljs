@@ -39,6 +39,7 @@
 (defonce nrepl-ws-channel (atom nil))
 (defonce nrepl-sessions (atom {}))
 (defonce nrepl-sockets (atom #{}))
+(defonce server-started? (atom false))
 
 (defn send-bencode [out response]
   (.write out (bencode/encode response)))
@@ -243,6 +244,7 @@
              (fn []
                (let [port-file-path (path/join (cwd) ".nrepl-port")]
                  (fs/writeFile port-file-path (str port)))
+               (reset! server-started? true)
                (js/console.log
                  (str "nREPL server started on port " port
                       " on host " host " - nrepl://" host ":" port))))))
@@ -268,6 +270,76 @@
                         "nREPL: No socket for session" session-id)))))
            (.on ws "close" #(do (js/console.log "nREPL browser disconnected.")
                                 (reset! nrepl-ws-channel nil)))))))
+
+(defn nrepl-eval [code dir]
+  (let [port-file-path (path/join (or dir ".") ".nrepl-port")]
+    (if-not (fs-sync/existsSync port-file-path)
+      (do
+        (js/console.error
+          "No running nREPL server found (.nrepl-port missing).")
+        (.exit js/process 1))
+      (let [port (js/parseInt
+                   (str/trim (fs-sync/readFileSync port-file-path "utf8")))]
+        (if (js/isNaN port)
+          (do
+            (js/console.error "Invalid port in .nrepl-port.")
+            (.exit js/process 1))
+          (let [socket (net/createConnection #js {:port port :host "127.0.0.1"})
+                buffer (atom (js/Buffer.alloc 0))
+                session-atom (atom nil)
+                has-error? (atom false)]
+            (.on socket "error"
+                 (fn [err]
+                   (js/console.error
+                     (str "Could not connect to nREPL server on port "
+                          port ": " (.-message err)))
+                   (.exit js/process 1)))
+            (.on socket "connect"
+                 (fn []
+                   (send-bencode socket
+                                 (clj->js {:op "clone"
+                                           :id (str (random-uuid))}))))
+            (.on socket "data"
+                 (fn [data]
+                   (swap! buffer #(js/Buffer.concat (clj->js [% data])))
+                   (loop []
+                     (when (> (.-length @buffer) 0)
+                       (let [msg (try
+                                   (bencode/decode @buffer "utf8")
+                                   (catch :default _e
+                                     :decode-error))]
+                         (when (not= msg :decode-error)
+                           (let [bytes-consumed (bencode/encodingLength msg)
+                                 msg-clj (js->clj msg :keywordize-keys true)]
+                             (swap! buffer #(.slice % bytes-consumed))
+                             (if-let [new-sess (:new-session msg-clj)]
+                               (do
+                                 (reset! session-atom new-sess)
+                                 (send-bencode
+                                   socket
+                                   (clj->js {:op "eval"
+                                             :code code
+                                             :session new-sess
+                                             :id (str (random-uuid))})))
+                               (do
+                                 (when-let [out (:out msg-clj)]
+                                   (.write js/process.stdout out))
+                                 (when-let [err (:err msg-clj)]
+                                   (reset! has-error? true)
+                                   (.write js/process.stderr err))
+                                 (when-let [ex (:ex msg-clj)]
+                                   (reset! has-error? true)
+                                   (js/console.error ex))
+                                 (when-some [val (:value msg-clj)]
+                                   (println val))
+                                 (when-let [status (:status msg-clj)]
+                                   (when (some #{"done"} status)
+                                     (when (some #{"error" "eval-error"} status)
+                                       (reset! has-error? true))
+                                     (.end socket)
+                                     (.exit js/process
+                                            (if @has-error? 1 0))))))
+                             (recur))))))))))))))
 
 ; *** webserver funtionality *** ;
 
@@ -526,6 +598,12 @@
     :default default-port
     :parse-fn js/Number
     :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
+   ["-e" "--eval CODE"
+    "Evaluate ClojureScript expression on running server."
+    :id :eval]
+   [nil "--nrepl CODE"
+    "Evaluate ClojureScript expression on running server."
+    :id :eval]
    ["-i" "--init" (str "Set up a basic Scittle project. Copies an html,"
                        "cljs, and css file into the current folder.")]
    ["-h" "--help"]
@@ -540,7 +618,7 @@
 (defonce handle-exit
   (let [cleanup-fn
         #(let [port-file-path (path/join (cwd) ".nrepl-port")]
-           (when (fs-sync/existsSync port-file-path)
+           (when (and @server-started? (fs-sync/existsSync port-file-path))
              (js/console.log "Removing .nrepl-port file.")
              (fs-sync/unlinkSync port-file-path)))]
     (.on js/process "exit" cleanup-fn)
@@ -658,6 +736,8 @@
             (print e))
           (:help options)
           (print-usage summary)
+          (:eval options)
+          (nrepl-eval (:eval options) (:dir options))
           (:init options)
           (install-examples)
           :else
