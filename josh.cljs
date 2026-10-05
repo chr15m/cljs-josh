@@ -547,16 +547,51 @@
 
        (setup-sse-connection))))
 
-(defn html-injector [req res done dir ws-port log-console?]
+(def cli-options
+  [["-d" "--dir DIR" "Path to dir to serve."
+    :default "./"
+    :validate [#(fs-sync/existsSync %) "Must be a directory that exists."]]
+   ["-p" "--port PORT" "Webserver port number."
+    :default default-port
+    :parse-fn js/Number
+    :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
+   ["-e" "--eval CODE"
+    "Evaluate ClojureScript expression on running server."
+    :id :eval]
+   [nil "--nrepl CODE"
+    "Evaluate ClojureScript expression on running server."
+    :id :eval]
+   ["-i" "--init" (str "Set up a basic Scittle project. Copies an html,"
+                       "cljs, and css file into the current folder.")]
+   ["-h" "--help"]
+   [nil "--log-console" "Log browser console output to ./.josh.console.log"]
+   [nil "--prod" "Disable live-reloading and nREPL for production."]])
+
+(defn write-console-log-preamble [nrepl-port]
+  (let [summary (:summary (cli/parse-opts [] cli-options))
+        preamble (str "# Josh Browser Console Log\n\n"
+                      "This file captures console output and errors from the browser running Scittle.\n"
+                      "Josh is a live-reloading ClojureScript web server for Scittle projects.\n\n"
+                      (when nrepl-port
+                        (str "nREPL port: " nrepl-port "\n"))
+                      "You can evaluate expressions against the running browser session with:\n"
+                      "  josh -e '<clojurescript-expression>'\n"
+                      "  josh --nrepl '<clojurescript-expression>'\n\n"
+                      "CLI options summary:\n"
+                      summary "\n\n"
+                      "--- Browser Log Output ---\n\n")]
+    (try
+      (fs-sync/writeFileSync console-log-file preamble)
+      (catch :default e
+        (js/console.error "Error writing log preamble:" e)))))
+
+(defn html-injector [req res done dir ws-port nrepl-port log-console?]
   ; intercept static requests to html and inject the loader script
   (p/let [html (find-html req dir)]
     (if html
       (do
         (when log-console?
-          (try
-            (fs-sync/writeFileSync console-log-file "")
-            (catch :default e
-              (js/console.error "Error truncating log file:" e))))
+          (write-console-log-preamble nrepl-port))
         (let [has-head? (re-find #"(?i)<head[^>]*>" html)
               html (if (and log-console? has-head?)
                      (str/replace-first
@@ -589,26 +624,6 @@
   [_event-type filename]
   (js/console.log "Frontend reloading:" filename)
   (send-to-all {:reload (str "/" filename)}))
-
-(def cli-options
-  [["-d" "--dir DIR" "Path to dir to serve."
-    :default "./"
-    :validate [#(fs-sync/existsSync %) "Must be a directory that exists."]]
-   ["-p" "--port PORT" "Webserver port number."
-    :default default-port
-    :parse-fn js/Number
-    :validate [#(< 1024 % 0x10000) "Must be a number between 1024 and 65536"]]
-   ["-e" "--eval CODE"
-    "Evaluate ClojureScript expression on running server."
-    :id :eval]
-   [nil "--nrepl CODE"
-    "Evaluate ClojureScript expression on running server."
-    :id :eval]
-   ["-i" "--init" (str "Set up a basic Scittle project. Copies an html,"
-                       "cljs, and css file into the current folder.")]
-   ["-h" "--help"]
-   [nil "--log-console" "Log browser console output to ./.josh.console.log"]
-   [nil "--prod" "Disable live-reloading and nREPL for production."]])
 
 (defonce handle-error
   (.on js/process "uncaughtException"
@@ -709,6 +724,7 @@
           (start-ws-server! ws-p)
           (start-watchers dir)
           (when log-console?
+            (write-console-log-preamble nrepl-p)
             (.post app "/_cljs-josh/log"
                    (.json express)
                    (fn [req res]
@@ -723,7 +739,7 @@
                            (catch :default e
                              (js/console.error "Error writing log file:" e))))
                        (.sendStatus res 200)))))
-          (.get app "/*" #(html-injector %1 %2 %3 dir ws-p log-console?))
+          (.get app "/*" #(html-injector %1 %2 %3 dir ws-p nrepl-p log-console?))
           (.use app "/_cljs-josh" #(sse-handler %1 %2))))
       (start-webserver app dir port))
     #(js/console.error %)))
