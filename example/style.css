@@ -1,12 +1,45 @@
-body { 
+body {
   margin: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  background: #111;
+  color: #fff;
+  font-family: Arial, Helvetica, Inter, sans-serif;
+  font-size: 1.5rem;
 }
 
 main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
+}
+
+h1 {
+  margin: 0 0 1.25rem;
+}
+
+pre {
+  font-family: monospace;
+  border: 1px dotted #fff;
+  padding: 0.5rem 1rem;
+  margin: 0 0 1.25rem;
+}
+
+button {
+  background: transparent;
+  color: #fff;
+  border: 2px solid #fff;
+  padding: 0.5rem 1rem;
+  font-family: inherit;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #fff;
+  color: #111;
 }
